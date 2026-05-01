@@ -1,0 +1,419 @@
+% ============================================================
+%  Presentación Beamer — ICS2122 Capstone — Grupo 10
+%  Ruteo de Profesionales de la Salud (TD-HDARP)
+%  Tiempo objetivo: 7 minutos
+%
+%  Compilar con: pdflatex presentacion_grupo10.tex
+%  Para Fira Sans (metropolis nativo): xelatex presentacion_grupo10.tex
+% ============================================================
+
+\documentclass[10pt, aspectratio=169]{beamer}
+
+\usetheme{metropolis}
+% \usetheme{Madrid}  % Alternativa si metropolis no está disponible
+
+% ── Paquetes ────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{booktabs}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{array}
+
+\usetikzlibrary{arrows.meta, positioning}
+
+% ── Paleta de colores ────────────────────────────────────────
+\definecolor{ucazul}{RGB}{0, 51, 102}
+\definecolor{ucgris}{RGB}{100, 100, 100}
+\definecolor{verdeok}{RGB}{0, 128, 64}
+\definecolor{rojono}{RGB}{180, 30, 30}
+\definecolor{naranja}{RGB}{210, 100, 0}
+\definecolor{amarillo}{RGB}{220, 180, 0}
+
+% ── Colores Beamer ───────────────────────────────────────────
+\setbeamercolor{frametitle}{bg=ucazul, fg=white}
+\setbeamercolor{progress bar}{fg=ucazul}
+\setbeamercolor{alerted text}{fg=ucazul}
+\setbeamercolor{block title}{bg=ucazul!12, fg=ucazul}
+\setbeamercolor{block body}{bg=ucazul!5}
+\setbeamercolor{example block title}{bg=verdeok!15, fg=verdeok!70!black}
+\setbeamercolor{example block body}{bg=verdeok!5}
+
+\setbeamertemplate{frame numbering}[fraction]
+
+% ── Metadatos ────────────────────────────────────────────────
+\title{Ruteo de Profesionales de la Salud}
+\subtitle{TD-HDARP · Grupo 10 · ICS2122}
+\author{A.~Matta · V.~Encalada · J.A.~Muñoz · N.~Provoste · B.~Suazo}
+\institute{Pontificia Universidad Católica de Chile}
+\date{Marzo 2026}
+
+% ────────────────────────────────────────────────────────────
+\begin{document}
+
+% ============================================================
+% PORTADA
+% ============================================================
+\begin{frame}[plain, noframenumbering]
+  \titlepage
+  \vspace{-0.8em}
+  \begin{columns}[T]
+    \column{0.55\textwidth}
+      \footnotesize\textbf{Grupo 10}\\[3pt]
+      Alonso Matta Sotomayor\\
+      Vicente Encalada Henríquez\\
+      Juan Andrés Muñoz Solano\\
+      Nicolás Provoste Moya \quad Benjamín Suazo Massaro
+    \column{0.45\textwidth}
+      \footnotesize\textbf{Equipo docente}\\[3pt]
+      Profesor: Steffan Heinz\\
+      Ayudante: Fernanda Godoy
+  \end{columns}
+\end{frame}
+
+% ============================================================
+% SLIDES 1–2: DESCRIPCIÓN DEL PROBLEMA
+% ============================================================
+\begin{frame}{Descripción del Problema}
+
+  \begin{block}{El caso}
+    Una empresa prestadora de servicios de salud en \textbf{Santiago de Chile} debe planificar diariamente el transporte de sus profesionales a los centros médicos donde trabajan.
+  \end{block}
+
+  \vspace{12pt}
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item Cada día los profesionales solicitan transporte para el día siguiente
+    \item Hay dos turnos: \textcolor{verdeok}{\bfseries AM} (casa $\to$ trabajo) y \textcolor{rojono}{\bfseries PM} (trabajo $\to$ casa)
+    \item Las rutas se planifican durante la tarde anterior
+    \item Puntualidad crítica: impacta directamente la atención de pacientes
+  \end{itemize}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Descripción del Problema \textnormal{\small (cont.)}}
+
+  \begin{itemize}\setlength\itemsep{12pt}
+    \item La empresa dispone de una \textbf{flota heterogénea}: vehículos de distintos tamaños y capacidades
+    \item Cada vehículo tiene un \textbf{costo fijo} (por usarlo, aunque vaya vacío) y un \textbf{costo variable} (por kilómetro recorrido)
+    \item El objetivo es \textbf{minimizar el costo total} cumpliendo estrictamente todas las restricciones
+    \item Las restricciones provienen de contratos sindicales, límites de tiempo y características de la flota
+  \end{itemize}
+
+  \vspace{14pt}
+  \begin{block}{}
+    \centering\textbf{TD-HDARP}: Time-Dependent Heterogeneous Dial-a-Ride Problem \quad$\Rightarrow$\quad \textbf{NP-Hard}
+  \end{block}
+
+\end{frame}
+
+% ============================================================
+% SLIDES 3–6: PRINCIPALES RESTRICCIONES
+% ============================================================
+\begin{frame}{Principales Restricciones — Categorías Sindicales}
+
+  \begin{block}{La regla}
+    Los profesionales se dividen en \textbf{4 categorías} (1 a 4). Un vehículo puede transportar simultáneamente \textbf{a lo más 2 categorías, y deben ser consecutivas}.
+  \end{block}
+
+  \vspace{10pt}
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item \textcolor{verdeok}{\textbf{Permitido:}} categorías 1+2, 2+3, o 3+4 (consecutivas entre sí)
+    \item \textcolor{rojono}{\textbf{No permitido:}} categorías 1+3, 1+4, 2+4 (no consecutivas)
+    \item Un pasajero \textit{puede} viajar solo si su viaje directo ya supera el tiempo máximo permitido
+    \item Es la restricción más inusual del problema — pocos trabajos en la literatura la modelan explícitamente
+  \end{itemize}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Principales Restricciones — Ventanas de Tiempo}
+
+  \begin{block}{La regla}
+    Cada profesional tiene una \textbf{ventana de tiempo} que define cuándo puede ser recogido o dejado. El vehículo no puede llegar antes ni después de ese rango.
+  \end{block}
+
+  \vspace{10pt}
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item Turno \textcolor{verdeok}{\bfseries AM}: recogida en domicilio dentro del horario acordado, llegada a tiempo al turno
+    \item Turno \textcolor{rojono}{\bfseries PM}: entrega en domicilio dentro del horario post-turno
+    \item Las ventanas son \textbf{restricciones duras}: no hay penalización si se violan, simplemente la solución se vuelve infactible
+    \item Planificar múltiples rutas respetando todas las ventanas simultáneamente es lo que genera la complejidad combinatoria
+  \end{itemize}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Principales Restricciones — Permanencia en el Vehículo}
+
+  \begin{block}{La regla}
+    Existe un \textbf{límite de tiempo} que un pasajero puede permanecer dentro del vehículo durante su traslado.
+  \end{block}
+
+  \vspace{10pt}
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item Evita que un profesional esté en ruta durante mucho tiempo mientras se recogen otros pasajeros
+    \item Restricción vinculada al \textbf{bienestar laboral}: forma parte del contrato sindical
+    \item Excepción: si el viaje directo entre domicilio y centro médico ya supera el límite, el profesional puede viajar solo en el vehículo
+    \item Introduce una tensión entre \textit{eficiencia de la ruta} y \textit{comodidad del pasajero}
+  \end{itemize}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Principales Restricciones — Flota y Estructura de Costos}
+
+  \begin{block}{La regla}
+    La empresa opera con vehículos de \textbf{distintos tamaños y capacidades}, cada uno con su propio esquema de costos.
+  \end{block}
+
+  \vspace{10pt}
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item \textbf{Costo fijo}: se incurre al usar el vehículo, independientemente de si va lleno o vacío
+    \item \textbf{Costo variable}: proporcional a los kilómetros recorridos
+    \item La decisión de qué vehículo asignar a cada ruta afecta directamente el costo total
+    \item Usar muchos vehículos pequeños o pocos grandes son estrategias con trade-offs distintos
+  \end{itemize}
+
+\end{frame}
+
+% ============================================================
+% SLIDE 7: ANÁLISIS DE DATOS (EN DESARROLLO)
+% ============================================================
+\begin{frame}{Análisis de Datos}
+
+  \vspace{20pt}
+  \begin{block}{}
+    \centering
+    \vspace{8pt}
+    \textit{Esta sección se encuentra actualmente en desarrollo.}\\[4pt]
+    Los datos del caso de estudio están siendo recopilados y procesados.\\[4pt]
+    Se presentará en una entrega futura.
+    \vspace{8pt}
+  \end{block}
+
+\end{frame}
+
+% ============================================================
+% SLIDE 8: KPIs
+% ============================================================
+\begin{frame}{KPIs — Indicadores de Desempeño}
+
+  \vspace{4pt}
+  Los siguientes indicadores permitirán evaluar la calidad de cualquier solución propuesta:
+
+  \vspace{10pt}
+  \begin{columns}[T]
+    \column{0.50\textwidth}
+      \begin{itemize}\setlength\itemsep{10pt}
+        \item \textbf{Costo operacional total}\\
+          \footnotesize Suma de costos fijos + variables de todos los vehículos utilizados
+        \item \textbf{Tiempo promedio de permanencia}\\
+          \footnotesize Tiempo medio que cada pasajero pasa dentro del vehículo. Aunque el máximo es restricción dura, el promedio diferencia la calidad entre soluciones factibles
+        \item \textbf{Tasa de ocupación de la flota}\\
+          \footnotesize Pasajeros transportados sobre la capacidad total despachada
+      \end{itemize}
+
+    \column{0.50\textwidth}
+      \begin{itemize}\setlength\itemsep{10pt}
+        \item \textbf{Distancia total recorrida}\\
+          \footnotesize Kilómetros acumulados por toda la flota en operación
+        \item \textbf{Número de vehículos utilizados}\\
+          \footnotesize Cada vehículo adicional implica un costo fijo; minimizar flota es un objetivo secundario relevante
+        \item \textbf{Tiempo de cómputo}\\
+          \footnotesize Tiempo real de ejecución del algoritmo. El contexto operativo exige una solución en menos de 60 minutos para ser usable en producción
+      \end{itemize}
+
+      \vspace{10pt}
+      \begin{block}{}
+        \footnotesize Serán evaluados comparando la solución propuesta contra una línea base heurística.
+      \end{block}
+  \end{columns}
+
+\end{frame}
+
+% ============================================================
+% SLIDES 9–10: REVISIÓN BIBLIOGRÁFICA / ESTADO DEL ARTE
+% ============================================================
+\begin{frame}{Estado del Arte — El DARP en la literatura}
+
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item El \textbf{Dial-a-Ride Problem (DARP)} surgió para modelar transporte de personas con movilidad reducida y pacientes — su lógica se extendió hoy al transporte corporativo y de salud
+    \item \textbf{Ho et al.\ (2018)} revisaron 277 publicaciones y encontraron que el área ha crecido exponencialmente en los últimos 20 años, impulsada por aplicaciones reales en múltiples industrias
+    \item \textbf{Cordeau \& Laporte (2003)} demostraron que el DARP es \textbf{NP-Hard}: ningún algoritmo exacto puede resolverlo eficientemente para instancias reales
+    \item Nuestro caso (\textbf{TD-HDARP}) combina usuarios heterogéneos + tiempos dependientes de la hora: una variante con menos de 20 papers específicos en la literatura
+  \end{itemize}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Estado del Arte — Hallazgos Clave}
+
+  \begin{itemize}\setlength\itemsep{10pt}
+    \item \textbf{Cordeau (2006)} demostró que los métodos exactos resuelven óptimamente solo hasta \textasciitilde{}16 solicitudes; con más pasajeros, el tiempo de cómputo supera las horas
+    \item \textbf{Ropke \& Pisinger (2006)} revolucionaron el campo: con \textbf{ALNS} manejaron 100+ solicitudes manteniendo alta calidad de solución — hoy es el estado del arte
+    \item \textbf{Parragh (2011)} encontró que la \textbf{heterogeneidad de usuarios} es el factor más complejo; requiere operadores especializados que respeten las reglas de compatibilidad
+    \item \textbf{Ichoua et al.\ (2003)} mostraron que ignorar los tiempos de viaje dependientes de la hora genera rutas infactibles en la práctica — la congestión no puede omitirse
+  \end{itemize}
+
+\end{frame}
+
+% ============================================================
+% SLIDES 11–13: DISCUSIÓN METODOLÓGICA
+% ============================================================
+\begin{frame}{Metodología — Métodos Exactos (MILP)}
+
+  \begin{block}{¿En qué consiste?}
+    Modelar el problema como un \textbf{programa lineal entero mixto} y resolverlo con algoritmos Branch-and-Cut o Branch-and-Price (usando solucionadores como Gurobi).
+  \end{block}
+
+  \vspace{8pt}
+  \begin{columns}[T]
+    \column{0.50\textwidth}
+      \begin{exampleblock}{\textcolor{verdeok}{Ventajas}}
+        \begin{itemize}\setlength\itemsep{5pt}
+          \item Garantiza la \textbf{solución óptima} global
+          \item Proporciona una \textbf{cota inferior} para comparar otros algoritmos
+          \item Útil para validar soluciones en instancias pequeñas
+        \end{itemize}
+      \end{exampleblock}
+
+    \column{0.50\textwidth}
+      \begin{alertblock}{\textcolor{rojono}{Limitaciones}}
+        \begin{itemize}\setlength\itemsep{5pt}
+          \item Complejidad \textbf{exponencial} (NP-Hard)
+          \item Inviable para más de \textasciitilde{}40 solicitudes: supera 1 hora de cómputo
+          \item Nuestro caso tiene \textbf{cientos de profesionales} → completamente impracticable
+        \end{itemize}
+      \end{alertblock}
+  \end{columns}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Metodología — Heurísticas Constructivas}
+
+  \begin{block}{¿En qué consiste?}
+    Construir una solución \textbf{paso a paso} asignando pasajeros a rutas de forma secuencial, eligiendo en cada paso la opción ``más barata'' disponible (\textit{inserción voraz / greedy}).
+  \end{block}
+
+  \vspace{8pt}
+  \begin{columns}[T]
+    \column{0.50\textwidth}
+      \begin{exampleblock}{\textcolor{verdeok}{Ventajas}}
+        \begin{itemize}\setlength\itemsep{5pt}
+          \item \textbf{Extremadamente rápidas}: cientos de pasajeros en segundos
+          \item Fáciles de implementar y de entender
+          \item Útiles como \textbf{solución inicial} para otros algoritmos
+        \end{itemize}
+      \end{exampleblock}
+
+    \column{0.50\textwidth}
+      \begin{alertblock}{\textcolor{rojono}{Limitaciones}}
+        \begin{itemize}\setlength\itemsep{5pt}
+          \item Visión \textbf{cortoplacista}: decisiones locales llevan a rutas globalmente malas
+          \item Quedan atrapadas en \textbf{óptimos locales} de baja calidad
+          \item La restricción de categorías sindicales genera frecuentes \textbf{rutas infactibles}
+        \end{itemize}
+      \end{alertblock}
+  \end{columns}
+
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────
+\begin{frame}{Metodología — Metaheurísticas (ALNS)}
+
+  \begin{block}{¿En qué consiste?}
+    El \textbf{Adaptive Large Neighborhood Search} destruye y reconstruye iterativamente partes de la solución, usando operadores especializados que se adaptan según su desempeño previo.
+  \end{block}
+
+  \vspace{8pt}
+  \begin{columns}[T]
+    \column{0.50\textwidth}
+      \begin{exampleblock}{\textcolor{verdeok}{Ventajas}}
+        \begin{itemize}\setlength\itemsep{5pt}
+          \item Escala a instancias \textbf{reales} con cientos de solicitudes
+          \item Permite diseñar operadores que \textbf{respetan la regla de categorías}
+          \item Es el \textbf{estado del arte} en problemas de ruteo complejo (Ropke \& Pisinger, 2006)
+          \item El Recocido Simulado integrado permite escapar de óptimos locales
+        \end{itemize}
+      \end{exampleblock}
+
+    \column{0.50\textwidth}
+      \begin{alertblock}{\textcolor{rojono}{Limitaciones}}
+        \begin{itemize}\setlength\itemsep{5pt}
+          \item Implementación más \textbf{compleja} que las heurísticas simples
+          \item Requiere \textbf{ajuste cuidadoso de parámetros} para converger bien
+          \item No garantiza el óptimo global
+        \end{itemize}
+      \end{alertblock}
+  \end{columns}
+
+\end{frame}
+
+% ============================================================
+% SLIDE 14: METODOLOGÍA SELECCIONADA
+% ============================================================
+\begin{frame}{Metodología Seleccionada — ALNS}
+
+  \begin{block}{¿Por qué ALNS?}
+    Es la única metodología que \textbf{escala al tamaño real del problema} y permite manejar la complejidad de la restricción sindical de categorías.
+  \end{block}
+
+  \vspace{8pt}
+  \begin{itemize}\setlength\itemsep{9pt}
+    \item La restricción de categorías \textit{rompe} el espacio de búsqueda: las heurísticas simples generan rutas infactibles de forma sistemática
+    \item El ALNS puede diseñar un operador de destrucción específico que \textbf{identifica y repara} los conflictos de categoría en cada iteración
+    \item Parragh (2011) demostró que este enfoque funciona en problemas análogos con usuarios heterogéneos
+    \item Permite obtener soluciones de alta calidad dentro del \textbf{límite operativo de 60 minutos}
+  \end{itemize}
+
+\end{frame}
+
+% ============================================================
+% SLIDE 15: PASOS FUTUROS (EN DESARROLLO)
+% ============================================================
+\begin{frame}{Pasos Futuros}
+
+  \vspace{20pt}
+  \begin{block}{}
+    \centering
+    \vspace{8pt}
+    \textit{Esta sección se encuentra actualmente en desarrollo.}\\[4pt]
+    El plan de trabajo detallado se presentará en una entrega futura.
+    \vspace{8pt}
+  \end{block}
+
+\end{frame}
+
+% ============================================================
+% DECLARACIÓN DE USO DE IA (sin numeración)
+% ============================================================
+\begin{frame}[plain, noframenumbering]{Declaración de Uso de IA}
+
+  \begin{columns}[T]
+    \column{0.50\textwidth}
+      \begin{block}{Herramientas utilizadas}
+        \footnotesize
+        \vspace{4pt}
+        \textbf{Gemini:} Redacción, ortografía y búsqueda bibliográfica\\[4pt]
+        \textbf{Claude:} Asistencia en código \LaTeX\ y análisis
+        \vspace{4pt}
+      \end{block}
+    \column{0.50\textwidth}
+      \begin{alertblock}{Consideración del equipo}
+        \footnotesize
+        El análisis, decisiones metodológicas y argumentos presentados son responsabilidad exclusiva del equipo.
+      \end{alertblock}
+  \end{columns}
+
+  \vspace{14pt}
+  \centering\small\textcolor{ucgris}{Grupo 10 · ICS2122 · Pontificia Universidad Católica de Chile · Marzo 2026}
+
+\end{frame}
+
+% ────────────────────────────────────────────────────────────
+\end{document}

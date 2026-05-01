@@ -1,0 +1,98 @@
+\documentclass[pdftex,spanish]{pucthesis} 
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{times} % Fuente Times New Roman
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% 1. Paquete para citas en formato APA
+\usepackage[notocbib]{apacite}
+
+
+
+
+\begin{document}
+
+\mdate{Marzo, 2026}
+\version{1}
+
+\title[INFORME 2: RUTEO DE PROFESIONALES\\ GRUPO 10]
+   {\bf INFORME 2: RUTEO DE PROFESIONALES DE LA SALUD\\ GRUPO 10}
+\author[Integrantes:]{Integrantes:\\
+\textnormal{\small{
+Alonso Matta Sotomayor\\
+Vicente Encalada Henríquez\\
+Juan Andrés Muñoz Solano\\
+Nicolás Provoste Moya\\
+Benjamín Suazo Massaro}}
+}
+
+\address{Escuela de Ingenier\'ia\\
+         Pontificia Universidad Cat\'olica de Chile\\ 
+         Santiago, Chile}
+
+\advisor{\textbf{Profesor Guía:} Steffan Widemann}
+\ogrsmember{\textbf{Ayudante Tutor:} Fernanda Godoy}
+\date{Marzo 2026}
+\copyrightname{Grupo 10}
+\copyrightyear{2026}
+
+\NoChapterPageNumber
+\pagenumbering{roman}
+\maketitle
+
+% --- ANEXOS Y DECLARACIÓN DE IA (OBLIGATORIO) [cite: 7151, 7161] ---
+%\appendix
+\chapter{Declaración de uso de IA}
+\input{chapters/declaracion_ia.tex}
+
+
+
+% --- SECCIONES PRELIMINARES ---
+\tableofcontents
+%\listoffigures
+\listoftables
+\cleardoublepage
+
+
+\phantomsection \label{resumen}
+\chapter*{RESUMEN}
+\input{chapters/resumen_ejec}
+\cleardoublepage
+
+
+
+% --- CUERPO DEL INFORME (ESTRUCTURA SEGÚN LINEAMIENTOS) [cite: 7051, 7088] --- 
+\chapter{Introducción} \label{ch:intro}
+\input{chapters/introduccion.tex}
+
+\chapter{Descripción detallada del problema} \label{ch:problema}
+\input{chapters/descripcion_problema.tex}
+
+\chapter{Discusión metodológica} \label{ch:metodologia}
+\input{chapters/metodologia.tex}
+
+\chapter{Pasos futuros y Plan de trabajo} \label{ch:futuro}
+\input{chapters/pasos_futuros.tex}
+
+\chapter{Conclusiones} \label{ch:conclusiones}
+\input{chapters/conclusiones.tex}
+
+% --- BIBLIOGRAFÍA EN FORMATO APA [cite: 7119, 7141] ---
+\cleardoublepage
+\bibliographystyle{apacite}
+\renewcommand{\bibname}{REFERENCIAS}
+\bibliography{Thesis}
+
+
+% --- ANEXOS ---
+\appendix
+\renewcommand{\thesection}{\arabic{section}}
+\input{chapters/anexos.tex}
+
+
+
+\end{document}

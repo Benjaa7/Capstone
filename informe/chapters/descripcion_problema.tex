@@ -1,0 +1,113 @@
+A continuación, se describe el problema y caso de estudio, junto con un análisis teórico y de datos asociados, abordaje profundo de los objetivos y las motivaciones.
+
+\section{Descripción del Problema}
+
+El caso en primera instancia representa un problema de enrutamiento logístico. Durante la mañana de una jornada laboral, cada profesional de la salud se inscribe solicitando transporte para el día siguiente, ya sea para el turno AM (ruta domicilio-trabajo) o PM (ruta trabajo-domicilio), indicando sus horarios disponibles. Las rutas se planifican durante la tarde del día de la inscripción.
+
+El problema se debe abordar con el fin de minimizar los costos operacionales, mediante cuatro decisiones clave: selección de flota (cantidad y tipo de vehículo a despachar), asignación de pasajeros (respetando compatibilidades sindicales), secuenciación de rutas (orden geográfico de paradas) y programación horaria (tiempos exactos de recogida y entrega sin exceder límites de espera o viaje).
+
+El modelo considera los recursos de la empresa, que dispone de una flota de vehículos variada en términos de tipo y espacio. El uso de un vehículo tiene asociado un costo fijo, el cual se cobra independientemente de la cantidad de personas dentro del este (es decir, estando vacío, incompleto o lleno, el cobro se realiza de todas formas) y un costo variable por kilómetro recorrido. 
+
+Existen además, las restricciones con cumplimiento obligatorio, que si bien, no hay penalizaciones por incumplimiento, este no puede ocurrir:
+\begin{itemize}
+    \item Categorías de pasajeros: cuatro grupos, con transporte simultáneo permitido solo entre dos categorías consecutivas (ej. 1 y 2, o 3 y 4).
+    \item Restricciones temporales: los profesionales no pueden llegar demasiado temprano ni permanecer excesivo tiempo en el vehículo.
+    \item Viaje individual: permitido si el trayecto directo hogar-trabajo supera el límite máximo de tiempo.
+\end{itemize}
+
+Además del desafío de optimización combinatoria, el problema presenta una segunda vertiente fundamental de carácter predictivo. Según los antecedentes históricos de la empresa, existe una discrepancia demostrada entre los tiempos de viaje pronosticados por los proveedores de ruteo estándar y los tiempos de viaje reales observados en terreno. 
+
+Dado que las ventanas de tiempo son sumamente estrictas (con márgenes de hasta solo 5 minutos para ciertas prioridades), planificar las rutas basándose en estimaciones teóricas erróneas conllevaría inevitablemente a retrasos operativos y a la violación de las normativas sindicales. Por lo tanto, la segunda parte del problema exige analizar la información histórica de la flota para crear un mecanismo de ajuste de tiempos, evaluando aspectos como la puntualidad. El modelo final no solo debe "rutear", sino que debe garantizar que las hojas de ruta generadas sean precisas, ejecutables en la realidad y robustas ante las variaciones del tráfico.
+
+
+
+
+
+
+\section{El Problema en la Literatura}
+
+Según la descripción y una exhaustiva revisión bibliográfica, el problema se clasifica como un \textit{Time-Dependent Heterogeneous Dial-a-Ride Problem} (de ahora en adelante TD-HDARP) \cite{Ho2018, Parragh2011}.
+
+Un problema de transporte a demanda dependiente del tiempo (parte TD-DARP de la abreviatura) nace de solicitudes de transporte con ubicaciones de recogida y entrega, número de pasajeros, ventanas de tiempo y límites máximos de viaje, en el cual se debe optimizar rutas y asignación de pasajeros \cite{Gaul2025}. Esta última frase, simplifica de forma correcta y precisa lo que se desea abordar en el caso de estudio.
+
+Los problemas de ruteo cada vez se vuelven más complejos debido a la demanda creciente de transporte y el aumento en la cantidad de flota de vehículos \cite{Gaul2025}. Por ello y según la información otorgada, considerar dentro del caso de estudio una flota heterogénea (H de la abreviatura), permite evaluar la complejidad del uso de las distintas capacidades según el tipo de vehículo que posee la empresa.
+
+Por otro lado, los problemas tipo DARP suelen ser clasificados como \textit{Non-deterministic Polynomial-time hard} (NP-Hard), una clase de optimización combinatoria, la cual tiene tiempos de cálculo que crecen exponencialmente \cite{TaylorFrancisNPHard}. En otras palabras, aunque existen métodos exactos que garantizan la solución óptima, el tiempo computacional requerido para resolver instancias de tamaño real crece exponencialmente, volviéndolos inoperantes para la toma de decisiones diarias \cite{Izadkhah2022}.
+
+
+
+
+\section{Objetivo y Motivación}
+El objetivo central es desarrollar un modelo matemático que capture fielmente las complejidades del problema, logrando un equilibrio entre la minimización de costos operativos y la satisfacción de las restricciones.
+
+La motivación de este trabajo reside en aplicar la investigación operativa para impactar directamente el ámbito de la salud. Al optimizar la movilidad, se busca mitigar el estrés de los profesionales y potenciar su eficiencia operativa, mejorando su bienestar integral. Asimismo, en el marco de los problemas DARP, estas soluciones son fundamentales para un futuro sostenible al reducir la congestión y las emisiones contaminantes, mitigando así el impacto ambiental negativo \cite{Gaul2025}.
+
+
+\section{Análisis de los Datos} %considerar mover las tablas a los anexos en caso de que falte espacio
+
+Los datos proporcionados se clasifican en tres grandes categorías: instancias operativas (archivos con extensión xlsx), matrices de tiempo y distancias (archivos con extensión csv con prefijo "times") y una muestra de tiempos reales observados. Todas las tablas que se mencionen para el análisis se encuentran en la sección Anexos.
+
+\subsection{Instancias Operativas}
+
+En Tabla \ref{tab:instancias operativas}, es posible observar que en la instancia AM, los 620 profesionales deben ser recogidos en sus domicilios y entregados a su lugar de trabajo. La hora más temprana de recogida (Pickup From) varía entre las 04:15 y las 06:00, mientras que el inicio de turno (Turn Start) se extiende desde las 04:35 hasta las 06:45. Las franjas de mayor concentración son las 04:50 (226 profesionales) y las 04:40 (110 profesionales). La ventana de tiempo promedio disponible entre la hora de recogida más temprana y el inicio del turno es de 42.6 minutos (con una desviación de 11.3 minutos) con un mínimo de solo 5 minutos y un máximo de 72 minutos.
+
+En la instancia PM, los 347 profesionales de la salud deben ser recogidos desde su lugar de trabajo a sus domicilios. La hora de fin de turno (Turn End) se distribuye principalmente en dos bloques: uno cercano a la medianoche (68 pasajeros a las 00:11, junto a otros horarios entre las 00:00 y las 00:06) y otro entre las 22:46 y las 23:56 donde se posicionan la mayoría de los profesionales. Los horarios más frecuentes son las 23:01 (79 profesionales) y las 00:11 (68 profesionales).
+
+Ambas instancias se clasifican además a los profesionales en 4 niveles de prioridad, tal y como se observa en Tabla \ref{tab:distribucion por prioridad}. La mayoría de los profesionales se concentra en las prioridades 2 y 3, representando conjuntamente más del 75\% en ambas instancias. La prioridad 4 es marginal (menor al 6\%), lo cual es relevante para el modelo dado que sus restricciones sindicales son más exigentes. 
+
+Cabe mencionar que las restricciones sindicales son idénticas para ambas instancias. Un detalle clave tras analizar estos datos, que se evidencia en Tabla \ref{tab:tiempos de espera y en vehi} es que la restricción de tiempo de espera más crítica es la de prioridad 4, solos 5 minutos de espera y 50 minutos como tiempo máximo en vehículo, esto limita fuertemente la posiblidad de agrupar esta prioridad con otra.
+
+También se dispone de dos tipos de vehículos, la cantidad y precio respectivo a estos se puede encontrar en Tabla \ref{tab:flota de vehi}. El costo variable por distancia es de 800 CLP/km para ambos tipos. Los tiempos de parada son de 3 minutos para recogida (pickup) y 1 minuto para entrega (delivery).
+
+Finalmente se tiene el factor geográfico, donde los puntos de recogida en la instancia AM abarcan una amplia zona de Santiago, con latitudes entre -33,75 y -33,18 y longitudes entre -70,89 y -70,52. Los centros de trabajo presentan una dispersión menor (latitud entre -33,61 y -33,37; longitud entre -70,76 y -70,53), sugiriendo que los centros médicos están relativamente concentrados en comparación con los domicilios de los profesionales. La instancia PM muestra un patrón invertido coherente con la instancia AM.
+
+\subsection{Matrices de Tiempo y Distancia}
+
+Se proporcionan 7 archivos CSV con tiempos y distancias pronosticados entre todos los pares de nodos (origen-destino) para horas específicas. Cada matriz posee 409.600 pares para AM y 134.689 para PM.
+
+Un hallazgo interesante es la variación de tiempos de viaje según la hora, evidenciando la naturaleza de dependencia temporal del problema (Tabla \ref{tab:var de tiempos}). En la jornada AM, los tiempos aumentan conforme avanza la mañana. En la jornada PM, la hora 22:00 presenta los tiempos más altos (28.6 min en promedio de viaje y velocidad de 33.9 km/h), siendo aproximadamente un 15\% más lenta que las horas de la madrugada. Las distancias se mantienen prácticamente constantes entre las diferentes horas (media de aproximadamente 16.6 km en instancia AM y 16.6 km en instancia PM), esto permite inferir que las variaciones con respecto a la media se pueden explicar por fluctuaciones en el tráfico y no a cambios en la ruta del proveedor del servicio. Estos viajes consideran todas las combinaciones posibles (domicilio/centro de trabajo, domicilio/domicilio, centro de trabajo/centro de trabajo y centro de trabajo/domicilio).
+
+
+
+\subsection{Muestras de Tiempos Reales}
+
+El archivo entregado para esta sección contiene 15.000 observaciones de viajes reales, recopiladas entre el 1 y el 14 de marzo del 2026. Para cada viaje se registran las coordenadas de origen y destino, la fecha/hora de partida, el tiempo pronosticado por el proveedor y el tiempo real observado.
+
+El análisis de esta muestra es la pieza central para resolver la segunda parte del problema: el ajuste de tiempos. Al observar la Tabla \ref{tab:comparativa}, se evidencia empíricamente la discrepancia entre la teoría y la realidad (por ejemplo, tiempos reales que alcanzan los 5.881 segundos frente a pronósticos que estimaban la mitad). Estas diferencias indican que no es factible utilizar los tiempos del proveedor de forma directa. Por ende, estos datos históricos servirán como conjunto de entrenamiento para desarrollar un modelo predictivo capaz de capturar estos márgenes de error y ajustar la matriz de tiempos del enrutador, garantizando que la planificación de las rutas sea fiel a las condiciones reales de operación.
+
+\subsection{Caracterización de la Demanda y Concentración Temporal}
+
+El análisis de las instancias revela una asimetría en la carga de trabajo entre jornadas, con 620 profesionales para el turno AM y 347 para el PM. En la mañana, se observa una densidad crítica de demanda: el 36\% de los profesionales (226 personas) requiere ser recogido a las 04:50, lo que genera un pico operativo en un intervalo de tiempo muy reducido. Asimismo, aunque la ventana de tiempo promedio para el traslado es de 42.6 minutos, existen casos críticos con solo 5 minutos de holgura, lo que elimina cualquier margen de error ante contingencias viales.
+
+\subsection{Impacto en las Restricciones Sindicales en la Eficiencia}
+
+El análisis de la distribución por prioridad revela un condicionante crítico para la optimización de las rutas. Según los datos recopilados, más del 75\% de los profesionales se concentran en las prioridades 2 y 3. No obstante, la categoría 4, aunque representa menos del 6\% de la demanda total, actúa como el principal limitador de la eficiencia operativa debido a sus estrictas restricciones sindicales: solo 5 minutos de tiempo máximo de espera y un límite de 50 minutos de permanencia en el vehículo.
+
+Dado que un vehículo solo puede transportar simultáneamente a pasajeros de a lo más dos categorías distintas y estas deben ser consecutivas, la baja densidad de pasajeros de prioridad 4 reduce drásticamente las probabilidades de consolidar esta prioridad con la 3. Esta posible fragmentación del espacio de soluciones factibles sugiere que el modelo podría converger a una tendencia de generar viajes de baja ocupación o trayectos casi directos para esta categoría, elevando el costo marginal por pasajero y dificultando el aprovechamiento total de la capacidad de la flota.
+
+\subsection{Outliers y Limpieza de Datos}
+A partir de la Tabla \ref{tab:comparativa}, existen:
+\begin{itemize}
+    \item \textbf{Valores atípicos superiores:} Se registran tiempos reales de hasta 5.881 segundos, superando con creces el máximo pronosticado de 3.250 segundos. Estos registros representan eventos de congestión extrema que podrían inducir a que un posible algortimo de aprendizaje automático sufra de error.
+    
+    \item \textbf{Inconsistencias de duración mínima:} El registro de viajes reales de solo 6 segundos para distancias que promedian los 16.6 km sugiere ruido o errores de captura en el sistema de telemetría, por lo que dentro de los próximos pasos se buscará verificar el volumen de datos por deciles y ver la dispersión entre los datos, para determinar posibles outliers y descartarlos en la medida que aporten más ruido a los datos.
+\end{itemize}
+
+
+
+
+\section{Indicadores de Desempeño (KPI's)}
+Para evaluar la calidad del modelo a implementar y contrastarlo con una línea base, se definen cuatro indicadores clave de desempeño. 
+
+\begin{itemize}
+    \item \textbf{Costo operacional total:} Gasto total de los viajes. Suma el cobro base de cada vehículo (2.200 pesos para el normal y 4.500 pesos para el grande) más los 800 pesos que cuesta cada kilómetro recorrido. Esto nos dice directamente si estamos cuidando el presupuesto de la empresa.
+    \item \textbf{Distancia total recorrida:}
+    Mide los kilómetros acumulados por la totalidad de la flota en operación durante una jornada. Este indicador refleja la eficiencia en la configuración de la ruta, permitiendo validar si el orden de los puntos de encuentro y llegada optimiza el trayecto geográfico.
+    \item \textbf{Tasa de ocupación de flota:} Cuantifica la eficiencia en el uso de las capacidades de los vehículos utilizados, considerando que un tipo de vehículo posee 3 asientos y el otro 6 asientos. Es un indicador de gran importancia debido a su relación con la complejidad de la restricción sindical. Una tasa de ocupación alta demuestra la robustez del algoritmo para consolidar a profesionales compatibles de manera inteligente, maximizando el aprovechamiento de la flota sin comprometer las restricciones de comodidad.
+    \item \textbf{Tiempo promedio de permanencia y espera:}
+    Monitorea el tiempo transcurrido desde el abordaje hasta la llegada a su destino. Minimizar este promedio es muy importante para garantizar el bienestar laboral.
+
+\end{itemize}
+
+Cada uno de los KPI's mencionados permitiran medir no solo la eficiencia económica del sistema, sino también el nivel de servicio y el cumplimiento de los objetivos estratégicos de la empresa.
+

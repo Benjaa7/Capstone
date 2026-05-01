@@ -1,0 +1,173 @@
+En este capítulo se analizan en profundidad las metodologías identificadas en la literatura científica para resolver el problema de ruteo de profesionales de la salud, clasificado como un TD-HDARP. Dado que es un problema de complejidad NP-Hard, se debe evaluar el equilibrio entre la calidad de la solución obtenida y el tiempo de cómputo requerido para su ejecución \cite{Cordeau2003}. Sobre la base del análisis cualitativo se construye una formalización matemática completa del problema, una estrategia de Caso Base defendible y una especificación algorítmica del ALNS adaptada de la evidencia reciente en contextos análogos.
+
+\section{Análisis de Metodologías Atingentes}
+
+A continuación, se presentan las tres grandes familias de métodos de resolución identificadas para este caso de estudio, contrastando sus características frente a las necesidades del proyecto y los datos históricos disponibles.
+
+\subsection{Métodos Exactos: Programación Lineal Entera Mixta (MILP)}
+Estos métodos buscan encontrar el óptimo global mediante algoritmos como \textit{Branch-and-Cut} o la Generación de Columnas (\textit{Branch-and-Price}) utilizando solucionadores como Gurobi \cite{Cordeau2006}. Si bien estos enfoques poseen la ventaja de garantizar la obtención matemática del óptimo global y de proveer cotas inferiores, sufren cuando se enfrentan a problemas de alta dimensionalidad. La evidencia científica señala que algoritmos exactos rara vez logran resolver a optimalidad instancias de DARP que superen las cincuenta solicitudes de transporte en tiempos computacionales razonables. Considerando que la instancia AM del caso de estudio requiere consolidar la demanda de 620 pasajeros, la excesiva demora de los métodos exactos los vuelve operativamente inviables para este caso. No obstante, la formalización MILP es imprescindible como referencia teórica y como oráculo sobre instancias reducidas (Caso Base).
+
+\subsection{Generación de Solución Inicial: Heurísticas Constructivas}
+Dado que las metaheurísticas (como ALNS) son algoritmos de mejoramiento, requieren obligatoriamente de una solución inicial sobre la cual iterar. En la literatura existen dos enfoques clásicos: la Heurística de Inserción Paralela con Ventanas de Tiempo \cite{Jaw1986} y variantes secuenciales de inserción aleatoria en múltiples rutas \cite{Pilati2025}. La primera garantiza factibilidad inicial pero impone un sesgo geométrico que puede restringir la exploración posterior; la segunda admite soluciones iniciales infactibles que el ALNS corrige mediante penalizaciones dinámicas, ofreciendo mayor diversidad. Para este proyecto se adopta el enfoque de \cite{Pilati2025}, por su compatibilidad directa con el mecanismo adaptativo del ALNS seleccionado y porque su implementación es computacionalmente más liviana.
+
+\subsection{Metaheurísticas: Tabu Search vs. ALNS}
+Para la fase de optimización, se evaluaron dos metaheurísticas predominantes: la Búsqueda Tabú (\textit{Tabu Search}) y \textit{Adaptive Large Neighborhood Search} (ALNS).
+
+Es importante aclarar que las limitaciones de \textit{Tabu Search} no son inherentes a su marco teórico, sino a la naturaleza de los operadores clásicos de búsqueda local que suele emplear (como \textit{Swap} o \textit{Relocate}). En un problema con restricciones sindicales estrictas y límites de tiempo críticos, el espacio de soluciones factibles está altamente fragmentado. Un operador de \textit{Tabu Search} tradicional generaría vecindarios donde la gran mayoría de los movimientos resultan infactibles, limitando severamente la exploración.
+
+En contraste, ALNS aborda este problema mediante la destrucción y reconstrucción a gran escala \cite{Ropke2006}. Al remover una fracción significativa de las solicitudes en una sola iteración, ALNS es capaz de ``saltar'' las barreras de infactibilidad geométrica y temporal, alcanzando regiones del espacio de búsqueda inalcanzables para búsquedas locales tradicionales. Adicionalmente, la adaptabilidad de los pesos de sus operadores permite al algoritmo auto-calibrarse al problema específico, sin requerir ajuste manual caso a caso.
+
+Por este motivo, se selecciona ALNS de manera definitiva. Los operadores específicos, la función de evaluación con penalizaciones dinámicas y el criterio de aceptación se especifican formalmente en la Sección~\ref{sec:alns}.
+
+\subsection{Otras Alternativas}
+Otras metaheurísticas ampliamente utilizadas en DARP y variantes similes como el VRP también fueron revisadas, con el objetivo de evaluar alternativas adicionales a ALNS. Sus consideraciones fueron en función de las restricciones del proyecto, analizando su capacidad de respuesta ante cada una de ellas.
+
+\begin{itemize}
+    \item \textbf{Variable Neighborhood Search (VNS)}
+\end{itemize}
+
+VNS ha mostrado buen desempeño en VRPTW y HFVRP \cite{Hansen2010}, y ha sido aplicado a DARP por Parragh (2011). Sin embargo, a partir de este último es posible inferir que sus vecindarios incrementales tienden a generar tasas muy altas de invianilidad al no respetar restricciones de compatibilidad ni considerar ventanas de tiempo rígidas, lo cual reduce su eficiencia exploratoria en problemas “ricos” como TD-HDARP.
+
+\begin{itemize}
+    \item \textbf{Iterated Local Search (ILS)}
+\end{itemize}
+
+También se encuentra ILS, la cual es una metaheurística competitiva en VRP clásico \cite{Lourenco2003}, pero los experimentos asociados y su razonamiento teórico reflejan una fuerte dependencia en la calidad de la solución inicial. En problemas con espacio factible fragmentado, como ocurre con tiempos máximos en vehículo y límites sindicales del DARP asociado a este proyecto, tiende a quedar atrapada en atractores locales.
+
+\begin{itemize}
+    \item \textbf{Hybrid Genetic Algorithm (HGA) \cite{Sohrabi2024}}
+\end{itemize}
+Finalmente, se considera la metaheurística híbrida (HGA), la investigación de Sohrabi et al. (2024) demuestran que permite explorar un espacio de búsqueda más amplio gracias al uso de poblaciones y operadores evolutivos, maneja bien soluciones infactibles sin necesidad de penalizaciones e incorpora diversidad adaptativa, presentando resultados competitivos incluso DARP con flotas heterogéneas. Dentro de sus desventajas se encuentra que requiere calibrar parámetros evolutivos como el tamaño poblacional y puede ser menos interpretable operacionalmente que heurísticas clásicas como VNS. Sin embargo, el mayor problema nace de las restricciones adicionales de este proyecto como la compatibilidad entre categorías y viajes bidireccionales, donde el HGA está diseñado para restricciones continuas y no categóricas duras. La integración de estas impiden que se generen los buenos resultados presentados por Sohrabi, descartando finalmente su uso.
+
+En contraste de estas últimas alternativas consideradas, ALNS ha demostrado consistentemente un desempeño superior en variantes “ricas” del DARP. Su diferencia crítica es que la arquitectura modular de ALNS permite incorporar restricciones duras mediante operadores de reparación específicos. En este proyecto, reglas sindicales y compatibilidades categóricas se integran directamente en los operadores de inserción y en el verificador de factibilidad, garantizando que el algoritmo nunca genere rutas que violen estas restricciones. Esta capacidad de “personalización de operadores” es una ventaja que no poseen ni VNS, ni ILS ni HGA, cuyos movimientos o cruces pueden generar configuraciones irrecuperables bajo dichas reglas. Por tanto, ALNS presenta el mejor equilibrio entre flexibilidad, calidad de solución, cumplimiento de restricciones y tiempo computacional para el problema estudiado.
+
+
+
+\subsection{Integración de Tiempos Dependientes (TD) y Modelos Predictivos}
+El componente \textit{Time-Dependent} (TD) del problema exige que la función objetivo incorpore tiempos de viaje $\tau_{ij}(t)$ que no son estáticos, sino que dependen directamente de la hora de inicio del viaje $t$. Como se evidenció en el análisis de datos empíricos del Capítulo~\ref{ch:problema}, los tiempos de viaje fluctúan según el horario.
+
+Para alimentar al algoritmo ALNS con una matriz de tiempos dinámica, se empleará un modelo predictivo basado en XGBoost (\textit{Extreme Gradient Boosting}) \cite{Chen2016}. Este modelo de aprendizaje automático es apto para capturar las relaciones no lineales del tráfico en Santiago utilizando los datos históricos entregados, entrenado minimizando el error cuadrático medio (MSE) entre el tiempo pronosticado y el real, calibrando hiperparámetros tales como \texttt{n\_estimators}, \texttt{max\_depth} y \texttt{learning\_rate}.
+
+Esta hibridación entre modelos predictivos (XGBoost para calcular $\tau_{ij}(t)$) y prescriptivos (ALNS para optimizar la asignación) es la propuesta central para abordar la complejidad del TD-HDARP.
+
+\section{Aplicación de ALNS en Contextos Análogos}
+\label{sec:papers}
+
+Además del marco teórico original de \cite{Ropke2006}, se revisan tres trabajos recientes que aplican ALNS a variantes del DARP en contextos cercanos al presente: \cite{Pilati2025} aporta el esqueleto de la función de evaluación con penalizaciones dinámicas, mientras que \cite{Zhao2022} y \cite{Portell2024} fundamentan el tratamiento del time-dependency y la integración de modelos predictivos.
+
+\subsection{Pilati et al. (2025): Transporte de Pacientes Dependientes}
+\cite{Pilati2025} resuelven un DARP estático con flota homogénea y depósito único para la Austrian Red Cross, minimizando el tiempo total de viaje bajo ventanas de tiempo, tiempos máximos de viaje y jornadas fijas. La principal contribución que adoptamos es su \textbf{función de evaluación con penalizaciones dinámicas},
+\begin{equation}
+\label{eq:eval-pilati}
+f(s) = c(s) + \alpha\, q(s) + \beta\, r(s) + \gamma\, d(s) + \varepsilon\, t(s),
+\end{equation}
+donde $q, r, d, t$ son violaciones de carga, tiempo en vehículo, jornada y ventanas, y los pesos se multiplican (o dividen) por $\delta\sim U(0{,}05,0{,}10)$ según si la restricción se viola o no. Solo soluciones con $f(s)=c(s)$ (estrictamente factibles) pueden ser incumbentes, permitiendo explorar transitoriamente regiones infactibles sin abandonar la dirección hacia el óptimo. Su implementación, validada sobre el \textit{benchmark} de \cite{Parragh2011}, obtiene soluciones a lo más $5\%$ peores en 18 de 20 instancias. Nuestra variante extiende el esquema incorporando flota heterogénea, tiempos dependientes $\tau_{ij}(t)$ y restricciones sindicales categóricas; por ello agregamos un término $\phi\,u(s)$ a \eqref{eq:eval-pilati} (ver Sección~\ref{sec:alns}).
+
+\subsection{Zhao et al. (2022) y Portell \& Lourenço (2024): Tratamiento del Time-Dependency}
+Dos trabajos recientes validan, desde ángulos complementarios, el manejo de $\tau_{ij}(t)$ en DARP sanitarios. \cite{Zhao2022} estudian un TD-PDARP \textit{single-vehicle} para ambulancias no-emergencia de la Hong Kong Hospital Authority y proponen un procedimiento de evaluación de factibilidad bajo tiempos dependientes de la hora de partida que justifica nuestras matrices horarias escalonadas y la fase de búsqueda local intra-ruta tras cada movimiento destroy--repair (su híbrido ALNS+LS obtiene el óptimo en el $1{,}03\%$ del tiempo de Gurobi). Por su parte, \cite{Portell2024} abordan un DARP heterogéneo ``rico'' (rHDARP) para el transporte de personas con movilidad reducida en Barcelona, integrando flota mixta (taxis y buses adaptados), múltiples depósitos y un modelo predictivo de \textit{machine learning} para estimar $\tau_{ij}(t)$ según hora y día. Es la referencia más cercana al presente caso pues valida simultáneamente los tres ejes que combinamos aquí (heterogeneidad de flota, dependencia temporal y predicción ML); adoptamos explícitamente su arquitectura en dos capas (predictiva con XGBoost, prescriptiva con ALNS/MILP), omitiendo el multi-depósito e incorporando las restricciones sindicales categóricas ausentes en su formulación.
+
+\section{Formalización Matemática del TD-HDARP}
+\label{sec:milp}
+
+En esta sección se presenta el modelo MILP del problema de ruteo de profesionales de la salud. La estructura general sigue la tradición de los DARP con flota heterogénea y restricciones de compatibilidad en contextos de salud \cite{Detti2017}, adaptada al caso time-dependent y al esquema sindical categórico chileno. Los parámetros numéricos están calibrados a partir de las Tablas del Capítulo~\ref{ch:problema}.
+
+Los conjuntos, parámetros y las variables de decisión junto a sus respectivas definiciones se encuentran en la sección \ref{anexo:conjuntos} de los Anexos. Por su lado, las restricciones se encuentran en la misma sección pero sus descripciones e interpretación se presentan a continuación, junto a la función objetivo que minimiza los costos.
+
+\subsection{Función Objetivo}
+\vspace{-0.8cm}
+\begin{equation}
+\label{eq:obj}
+\min \;\; \sum_{k\in K} F^{t(k)} y_k \;+\; c^{\mathrm{var}} \sum_{k\in K}\sum_{(i,j)\in V\times V} d_{ij}\, x_{ijk}
+\end{equation}
+
+
+\subsection{Interpretación Restricciones}
+Las primeras 4 restricciones plantean las reglas físicas de movimiento de los vehículos. \protect\eqref{eq:r1} garantiza que cada pasajero sea visitado exactamente una vez por un único vehículo (servicio obligatorio); \protect\eqref{eq:r2} obliga a que el mismo vehículo que recoge a un profesional en su origen, sea el encargado de entregarlo en su destino (acoplamiento); \protect\eqref{eq:r3} vincula las variables de ruteo con la activación binaria del vehículo ($y_k$), si un vehículo se utiliza, debe iniciar su ruta en el depósito de salida (nodo 0) y terminar en el depósito de llegada (nodo $2n+1$) (activación de flota y depósitos); por último, \protect\eqref{eq:r4} establece que si un vehículo llega a un nodo de recogida o entrega, debe obligatoriamente salir de este hacia un nuevo destino (conservación de flujo).
+
+Las siguientes restricciones, forman una familia relacionada a la temporalidad y ventanas. \protect\eqref{eq:r5} impone consistencia temporal,  calcula el instante de llegada al siguiente nodo y establece que la hora de inicio de servicio en $j$ debe ser coherente con la hora de salida de $i$, sumando el tiempo de parada ($s_i$) y el tiempo de viaje dinámico $\tau_{ij}(t)$ (se emplea una constante "Big-M" para activarla solo si el viaje se realiza); \protect\eqref{eq:r6} asegura que cronológicamente, el evento de recogida de un pasajero ocurra antes que su respectiva entrega (precedencia bajo tiempos dependientes); \protect\eqref{eq:r7} restringe de forma dura que la hora de inicio de servicio en cualquier nodo ocurra estrictamente dentro de su ventana temporal permitida.
+
+Respecto a la capacidad de flota se encuentran las restricciones \protect\eqref{eq:r8} y\protect\eqref{eq:r9}. \protect\eqref{eq:r8}  actualiza el número de pasajeros a bordo a medida que el vehículo avanza, sumando carga en los nodos de recogida ($+q_j$) y restándola en las entregas y \protect\eqref{eq:r9} garantiza que en ningún momento la cantidad de pasajeros a bordo supere la capacidad física ($Q^{t(k)}$) del tipo de vehículo despachado.
+
+La calidad del servicio están dadas por \protect\eqref{eq:r10}, que limita la duración del trayecto para cada pasajero, asegurando que la diferencia entre su hora de entrega y su hora de recogida no exceda el límite máximo de su categoría sindical; y \protect\eqref{eq:r11}, que evita que un profesional llegue excesivamente temprano a su turno, limitando el tiempo de espera en el centro médico según su umbral de prioridad.
+
+Finalmente se encuentra la familia de restricciones sindicales y de compatibilidad. \protect\eqref{eq:r12} actúa como gatillo lógico. Si un vehículo transporta a un pasajero de la categoría $r$, la variable binaria $u_{rk}$ se enciende; \protect\eqref{eq:r13} suma las variables activadas anteriormente para prohibir estrictamente que un mismo vehículo transporte simultáneamente a pasajeros de más de dos categorías distintas; por último \protect\eqref{eq:r14} impide mezclar a profesionales de categorías incompatibles. Si el vehículo lleva categorías distintas, estas deben ser estrictamente consecutivas.
+
+
+
+
+
+
+%\protect\eqref{eq:r10} el máximo tiempo en vehículo; \protect\eqref{eq:r11} el máximo adelanto al turno (la variante PM reemplaza el lado izquierdo por $B_{ik}-\sigma_i\leq W_{r_i}$); \protect\eqref{eq:r12}--\protect\eqref{eq:r14} la restricción sindical de dos categorías consecutivas. Si $\tau^{\mathrm{direct}}_i>M_{r_i}$, $i$ viaja solo: se añade la restricción condicional $L_{jk}\leq 1$ entre su \textit{pickup} y \textit{delivery}.
+
+\section{Estrategia de Caso Base}
+\label{sec:casobase}
+
+Dado el tamaño de la instancia completa (620 pasajeros AM; 347 PM) y la intratabilidad del MILP para estas dimensiones, se define una \textbf{instancia de Caso Base} que permite (i) validar la correctitud del modelo mediante Gurobi como \textit{oráculo} y (ii) calibrar los parámetros del ALNS antes de escalar a la instancia completa.
+
+\subsection{Simplificaciones Adoptadas}
+\begin{enumerate}
+    \item \textbf{Tamaño reducido}: se selecciona una submuestra estratificada de 40 pasajeros del turno AM centrada en el pico operativo de las 04:50, preservando la distribución de categorías (aprox.\ $14/35/45/6\%$) y la dispersión geográfica observada en la instancia original.
+    \item \textbf{Flota homogénea}: se considera únicamente vehículos tipo \textsc{Common} ($Q=3$, $F=2\,200$ CLP), eliminando temporalmente la dimensión de selección de tipo. Esto alinea el Caso Base con la configuración de \cite{Pilati2025}, facilitando la comparación directa de operadores ALNS sin confundirlos con efectos de heterogeneidad.
+    \item \textbf{Filtrado de \textit{outliers}}: se descartan observaciones de la muestra de tiempos reales con $\texttt{real\_time}$ fuera del rango intercuartil extendido (percentiles 5--95) antes de entrenar el estimador temporal, reduciendo el sesgo de casos anómalos (tiempos de 6 s o 5\,881 s identificados en el Capítulo~\ref{ch:problema}).
+    \item \textbf{Dependencia temporal preservada}: se mantiene la estructura $\tau_{ij}(t)$ con las tres matrices horarias (04, 05, 06), puesto que el enunciado exige rutas ``lo más acertadas posibles en sus tiempos de viaje''. Eliminar el componente TD invalidaría la tesis central del proyecto.
+\end{enumerate}
+
+\subsection{Línea Base y KPIs Reportados}
+Como \textit{benchmark} comparativo se implementa una \textbf{heurística miope}: asigna cada pasajero, en orden ascendente por $\sigma_i$, al vehículo Common activo que minimice el costo marginal dentro de sus ventanas factibles; si ninguno acepta, abre un nuevo vehículo. Además del costo objetivo \eqref{eq:obj}, se reportarán (siguiendo a \cite{Pilati2025}) tiempo de espera promedio por pasajero, balance de jornada de conductores (mín/mediana/máx por ruta), ocupación promedio y \textit{gap} relativo respecto a la línea base miope.
+
+\section{Especificación Algorítmica del ALNS}
+\label{sec:alns}
+
+\subsection{Función de Evaluación}
+Adaptando \eqref{eq:eval-pilati} a las restricciones sindicales del presente caso, se define
+\begin{equation}
+\label{eq:eval-ours}
+f(s) \;=\; c(s) + \alpha\,q(s) + \beta\,r(s) + \gamma\,d(s) + \varepsilon\,t(s) + \phi\,u(s),
+\end{equation}
+donde $c(s)$ denota el costo objetivo \eqref{eq:obj} y las funciones de violación son:
+\begin{itemize}
+    \item $q(s)$: suma de excesos de capacidad sobre todas las rutas.
+    \item $r(s)$: suma (en segundos) de excesos sobre $M_{r_i}$ (tiempo en vehículo).
+    \item $d(s)$: suma de excesos sobre $W_{r_i}$ (espera/adelanto).
+    \item $t(s)$: suma de violaciones de ventanas $[e_i,l_i]$.
+    \item $u(s)$: número de pares de categorías no consecutivas presentes simultáneamente en cada vehículo (adición propia, no presente en \cite{Pilati2025}).
+\end{itemize}
+Cada peso se multiplica por $\delta\sim U(0{,}05,0{,}10)$ si la violación correspondiente es no nula en la solución candidata, o se divide por $\delta$ en caso contrario. Una solución solo puede convertirse en incumbente ($s_{\text{best}}$) si $f(s)=c(s)$.
+
+\subsection{Heurística Constructiva}
+La solución inicial se construye según \cite{Pilati2025}: se ordenan las solicitudes por $e_i$ ascendente; se siembra una por ruta; las restantes se insertan secuencialmente en la ruta que minimice una de cuatro métricas de distancia seleccionada al azar por solicitud: $d(\mathrm{pk}_{\mathrm{last}},\mathrm{pk}_{\mathrm{new}})$, $d(\mathrm{pk}_{\mathrm{last}},\mathrm{dl}_{\mathrm{new}})$, $d(\mathrm{dl}_{\mathrm{last}},\mathrm{pk}_{\mathrm{new}})$, $d(\mathrm{dl}_{\mathrm{last}},\mathrm{dl}_{\mathrm{new}})$. La diversidad inducida evita sesgos geométricos y la eventual infactibilidad inicial es absorbida por el mecanismo de penalizaciones \eqref{eq:eval-ours}.
+
+\subsection{Operadores de Destrucción y Reparación}
+
+\begin{table}[h]
+\centering
+\caption{Operadores de destrucción y reparación del ALNS}
+\label{tab:operadores}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l p{8.5cm} @{}}
+\toprule
+\textbf{Operador} & \textbf{Descripción} \\ \midrule
+\multicolumn{2}{l}{\textit{Destrucción}} \\ \addlinespace
+Random Removal & Elimina solicitudes al azar de rutas al azar (diversificación). \\ \addlinespace
+Worst Removal & Elimina las solicitudes con mayor contribución marginal al costo. \\ \addlinespace
+Related Removal & Tipo Shaw: elimina solicitudes similares a una semilla por distancia, similitud de ventanas y misma categoría sindical. \\ \addlinespace
+Load-violation Removal & Prioriza las solicitudes que más contribuyen a $q(s)$; recae en Worst si no hay exceso. \\ \addlinespace
+Time-based Removal & Prioriza violaciones activas de $r(s)$ y $d(s)$. \\ \addlinespace
+Category-violation Removal & Adición propia: remueve solicitudes que causan violaciones de \eqref{eq:r13}--\eqref{eq:r14}. \\ \addlinespace
+Route Removal & Elimina rutas completas de baja ocupación; ataca directamente el costo fijo $F^{t(k)} y_k$. \\ \midrule
+\multicolumn{2}{l}{\textit{Reparación}} \\ \addlinespace
+Best Insertion & Selecciona vía ruleta entre las tres mejores posiciones por incremento mínimo de \eqref{eq:eval-ours}. \\ \addlinespace
+Random Insertion & Orden aleatorio de inserción; posición elegida también al azar. \\ \addlinespace
+Regret-2 / Regret-3 Insertion & Prioriza solicitudes cuyo costo se dispara si no se insertan en su mejor posición; Regret-3 resulta útil para pasajeros críticos (categoría 4, ventana de 5 min). \\ \addlinespace
+Zero-load Insertion & Novel de \cite{Pilati2025}: inserta en posiciones donde el vehículo está vacío, facilitando simultáneamente factibilidad de capacidad y de categoría. \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+La selección de operadores se realiza por \textit{ruleta} con probabilidades proporcionales a los pesos $w_i$, actualizados cada $t_{\mathrm{seg}}$ iteraciones mediante $w_{i,j+1}=w_{i,j}(1-\rho)+\rho\,\pi_i/\theta_i$, donde $\pi_i$ acumula los scores $\sigma_1=10$ (nuevo \textit{global best}), $\sigma_2=2$ (nueva referencia) o $\sigma_3=0$ y $\theta_i$ es el número de usos del operador en el segmento. Se siguen los valores de \cite{Pilati2025}: $\rho=0{,}1$ y $\delta\sim U(0{,}05,0{,}10)$; los tiempos $t_{\mathrm{tot}}$ ($\approx$30 min CPU), $t_{\mathrm{seg}}$ ($\approx$500 iter) y $t_{\mathrm{last}}$ ($\approx$2\,000 iter sin mejora) se calibrarán empíricamente sobre el Caso Base en la Entrega 3.
+
+\subsection{Criterio de Aceptación y Parada}
+La solución candidata $s'$ se acepta como nuevo incumbente $s_{\text{best}}$ sólo si es factible y $f(s')<f(s_{\text{best}})$. Como referencia de trabajo $s^*$, se acepta si $f(s')<f(s^*)$; si no hay mejora durante $t_{\mathrm{last}}$ iteraciones, $s'$ pasa a ser la nueva referencia (diversificación forzada). Si $c(s')\leq 1{,}02\cdot c(s^*)$, se aplica búsqueda local intra-ruta (swap/relocate) para intensificación, siguiendo el híbrido de \cite{Zhao2022}. El algoritmo termina al alcanzar $t_{\mathrm{tot}}$.
+
+\section{Fortalezas y Debilidades}
+
+Como \textbf{fortalezas}, el MILP \eqref{eq:obj}--\eqref{eq:r14} es coherente con el enunciado y los datos, habilita el uso de Gurobi como oráculo sobre el Caso Base, y la función de evaluación \eqref{eq:eval-ours} absorbe infactibilidades transitorias sin comprometer la factibilidad final, esencial en un espacio fragmentado por restricciones sindicales; además, el portafolio de operadores incluye uno propio (\textit{Category-violation Removal}) inexistente en la literatura revisada, y la adopción de parámetros validados en \cite{Pilati2025} reduce el espacio de calibración. Como \textbf{debilidades}, la representación escalonada de $\tau_{ij}(t)$ puede subestimar la volatilidad real del tráfico y el error del XGBoost se propaga al modelo; las restricciones se asumen duras, por lo que una infactibilidad en el Caso Base (por ejemplo, categoría 4 aislada) obligaría a relajaciones documentadas; la heurística constructiva aleatorizada admite soluciones iniciales infactibles que el ALNS debe reparar antes de mejorar el costo; y el peso $\phi$ del término sindical no tiene calibración previa en la literatura.

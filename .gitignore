@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editor
+.vscode/
+.idea/
+
+# Gurobi
+gurobi.log
+*.lp
+*.mps
+
+# Results (heavy)
+results/*.json
+results/plots/*.png
+!results/.gitkeep
+
+# OS
+desktop.ini
+.DS_Store
+Thumbs.db
