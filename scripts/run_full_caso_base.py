@@ -13,13 +13,13 @@ print(f"MIOPE: {miope.total_cost:.0f} CLP ({miope.n_vehicles_used} vehicles)")
 
 result = run_alns(inst, ALNSConfig(
     max_iter=100_000,
-    t_tot=3600,      # 1 hour as specified
+    t_tot=3600,
     t_last=500,
-    k_min=8,
-    k_max=20,
+    k_min=4,
+    k_max=10,
     seed=42,
     verbose=True,
-    log_every=200,
+    log_every=100,
     initial=miope,
 ))
 

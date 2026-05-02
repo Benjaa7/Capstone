@@ -208,7 +208,9 @@ def evaluate_route(route: Route, instance: "Instance") -> _RouteEval:
                 v.d += advance - W_r
             if pid in pickup_times:
                 ride = start - (pickup_times[pid] + s_pickup)
-                if ride > M_r:
+                # Solo-trip clause: passengers with τ_direct > M_r are
+                # exempt from the ride-time constraint (they travel alone).
+                if pid not in solo_pids and ride > M_r:
                     v.r += ride - M_r
             else:
                 # Delivery without a prior pickup in this route — invalid

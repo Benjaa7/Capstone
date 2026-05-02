@@ -145,28 +145,23 @@ def _replace_route(sol: Solution, route: Route) -> Solution:
         is_feasible=False,
         metadata=dict(sol.metadata),
     )
-_MAX_ROUTES_TO_SEARCH = 40  # geographic pre-filter threshold for best_insertion
+_MAX_ROUTES_TO_SEARCH = 80  # geographic pre-filter for best_insertion
 
 
 def _route_proximity_key(
     route: "Route", pid_pickup: tuple[float, float], instance: "Instance", n: int
 ) -> float:
-    """Cheap Euclidean proxy distance from ``pid_pickup`` to the last passenger
+    """Cheap squared-Euclidean proxy from ``pid_pickup`` to the last passenger
     node in ``route`` (used for geographic pre-filtering in best_insertion)."""
-    last_pax = next(
-        (nd for nd in reversed(route.nodes) if 1 <= nd <= 2 * n), None
-    )
+    last_pax = next((nd for nd in reversed(route.nodes) if 1 <= nd <= 2 * n), None)
     if last_pax is None:
         return float("inf")
     info_nd = last_pax if last_pax <= n else last_pax - n
     info = instance.pax_dict(info_nd)
-    if last_pax <= n:
-        coord = (info["pickup_lat"], info["pickup_lon"])
-    else:
-        coord = (info["delivery_lat"], info["delivery_lon"])
+    coord = (info["pickup_lat"], info["pickup_lon"]) if last_pax <= n else (info["delivery_lat"], info["delivery_lon"])
     dlat = pid_pickup[0] - coord[0]
     dlon = pid_pickup[1] - coord[1]
-    return dlat * dlat + dlon * dlon  # squared Euclidean (no sqrt needed for ranking)
+    return dlat * dlat + dlon * dlon
 
 
 # ---------------------------------------------------------------------------
@@ -181,13 +176,13 @@ def best_insertion(
 ) -> Solution:
     """Insert each removed pid in the lowest-scoring position over all routes.
 
-    Primary sort key: ``(new_viols, score_increment)`` so feasibility-
-    non-worsening placements are always preferred. A fresh solo route is
-    also evaluated and chosen when it beats all existing routes.
+    Sort key: ``(new_viols, score_increment)`` — feasibility-non-worsening
+    placements are always preferred. A new route is opened only when NO
+    existing route has any valid insertion position (best is None), keeping
+    the route count stable and letting the penalty mechanism fix violations.
 
-    For large instances (> ``_MAX_ROUTES_TO_SEARCH`` routes), only the
-    geographically closest routes are searched to keep per-iteration time
-    within budget.
+    For large fleets (> ``_MAX_ROUTES_TO_SEARCH`` routes), only the
+    geographically nearest routes are evaluated for speed.
     """
     n = sol.n_passengers
     pending = list(removed)
@@ -197,7 +192,6 @@ def best_insertion(
         info = instance.pax_dict(pid)
         pid_pickup = (info["pickup_lat"], info["pickup_lon"])
 
-        # Geographic pre-filter: evaluate only nearby routes when fleet is large.
         if len(sol.routes) > _MAX_ROUTES_TO_SEARCH:
             routes_to_search = sorted(
                 range(len(sol.routes)),
@@ -207,7 +201,6 @@ def best_insertion(
             routes_to_search = list(range(len(sol.routes)))
 
         best: tuple[tuple[int, float], int, int, int] | None = None
-        # (key=(new_viols, inc), route_idx, p_pos, d_pos)
         for r_idx in routes_to_search:
             route = sol.routes[r_idx]
             placement = _try_insertion_in_route(route, pid, n, instance, weights)
@@ -218,27 +211,14 @@ def best_insertion(
             if best is None or key < best[0]:
                 best = (key, r_idx, p_pos, d_pos)
 
-        # Evaluate opening a brand-new single-passenger route.
-        new_route_candidate = _open_new_route(sol, instance)
-        new_route_candidate = _insert_into_route(new_route_candidate, pid, 1, 1, n)
-        ev_nr = evaluate_route(new_route_candidate, instance)
-        nr_viols = (
-            int(ev_nr.violations.q > 1e-6)
-            + int(ev_nr.violations.r > 1e-6)
-            + int(ev_nr.violations.d > 1e-6)
-            + int(ev_nr.violations.t > 1e-6)
-            + int(ev_nr.violations.u > 1e-6)
-        )
-        nr_key: tuple[int, float] = (
-            nr_viols,
-            penalised_score(ev_nr.cost, ev_nr.violations, weights),
-        )
-
-        if best is not None and best[0] <= nr_key:
+        if best is not None:
             _, r_idx, p_pos, d_pos = best
             sol = _replace_route(sol, _insert_into_route(sol.routes[r_idx], pid, p_pos, d_pos, n))
         else:
-            sol = _replace_route(sol, new_route_candidate)
+            # Last resort: open a new route.
+            new_route = _open_new_route(sol, instance)
+            new_route = _insert_into_route(new_route, pid, 1, 1, n)
+            sol = _replace_route(sol, new_route)
 
     return sol
 
@@ -281,17 +261,26 @@ def _regret_insertion(
 ) -> Solution:
     """Generic regret-k insertion: at each step, pick the request whose gap
     between the best and the k-th best insertion is largest, and place it
-    in its best slot."""
+    in its best slot. Uses geographic pre-filtering for large fleets."""
     n = sol.n_passengers
     pending = list(removed)
 
     while pending:
-        # For each pending pid, compute its top-k insertion increments.
         best_overall: tuple[float, int, int, int, int] | None = None
-        # Negative regret means: pick larger regret → place that pid first.
         for pid in pending:
+            info = instance.pax_dict(pid)
+            pid_pickup = (info["pickup_lat"], info["pickup_lon"])
+            if len(sol.routes) > _MAX_ROUTES_TO_SEARCH:
+                routes_to_search = sorted(
+                    range(len(sol.routes)),
+                    key=lambda i: _route_proximity_key(sol.routes[i], pid_pickup, instance, n),
+                )[:_MAX_ROUTES_TO_SEARCH]
+            else:
+                routes_to_search = list(range(len(sol.routes)))
+
             increments: list[tuple[float, int, int, int]] = []
-            for r_idx, route in enumerate(sol.routes):
+            for r_idx in routes_to_search:
+                route = sol.routes[r_idx]
                 placement = _try_insertion_in_route(route, pid, n, instance, weights)
                 if placement is None:
                     continue
@@ -317,15 +306,22 @@ def _regret_insertion(
             if best_overall is None:
                 break  # nothing more to insert
             regret, _inc, pid, p_pos, d_pos = best_overall
-            # Re-scan to find best_route_idx AND its corresponding p_pos/d_pos
-            # (the cached p_pos/d_pos above belong to whichever route gave the
-            # lowest cost in the first scan pass, but sol.routes may have changed
-            # since then; we re-evaluate to get a consistent triple).
+            # Re-scan with geo-filter to find consistent (route_idx, p_pos, d_pos).
+            info = instance.pax_dict(pid)
+            pid_pickup = (info["pickup_lat"], info["pickup_lon"])
+            if len(sol.routes) > _MAX_ROUTES_TO_SEARCH:
+                rescan_routes = sorted(
+                    range(len(sol.routes)),
+                    key=lambda i: _route_proximity_key(sol.routes[i], pid_pickup, instance, n),
+                )[:_MAX_ROUTES_TO_SEARCH]
+            else:
+                rescan_routes = list(range(len(sol.routes)))
             best_route_idx = -1
             best_inc = float("inf")
             best_p_pos = p_pos
             best_d_pos = d_pos
-            for r_idx, route in enumerate(sol.routes):
+            for r_idx in rescan_routes:
+                route = sol.routes[r_idx]
                 placement = _try_insertion_in_route(route, pid, n, instance, weights)
                 if placement is None:
                     continue
@@ -425,5 +421,13 @@ REPAIR_OPERATORS: dict[str, RepairFn] = {
     "random": random_insertion,
     "regret2": regret2_insertion,
     "regret3": regret3_insertion,
+    "zero_load": zero_load_insertion,
+}
+
+# Faster subset for large instances (n > ~100) where regret operators are
+# prohibitively slow even with geographic pre-filtering.
+FAST_REPAIR_OPERATORS: dict[str, RepairFn] = {
+    "best": best_insertion,
+    "random": random_insertion,
     "zero_load": zero_load_insertion,
 }

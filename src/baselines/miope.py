@@ -281,11 +281,12 @@ class MiopeSolver:
         return self._finalize(routes)
 
     def _finalize(self, route_states: list[_RouteState]) -> Solution:
+        from src.alns.evaluation import evaluate_route
+
         out_routes: list[Route] = []
         fixed_cost = 0.0
         variable_cost = 0.0
         for state in route_states:
-            # Close route at depot_end with zero arc cost (virtual depot).
             nodes = list(state.nodes) + [self.depot_end]
             start_times = dict(state.start_times)
             start_times[self.depot_end] = 0.0
@@ -303,18 +304,90 @@ class MiopeSolver:
                 )
             )
 
+        # Post-processing: repair ride-time violations by moving offending
+        # passengers to solo routes, ensuring the MIOPE output is feasible.
+        repaired: list[Route] = []
+        solo_vid = max(r.vehicle_id for r in out_routes) + 1
+        n = self.n
+
+        for route in out_routes:
+            ev = evaluate_route(route, self.instance)
+            if ev.violations.r < 1e-6:
+                repaired.append(route)
+                continue
+
+            # Identify violating passengers using scheduled times from the evaluator.
+            violators: set[int] = set()
+            pickup_start: dict[int, float] = {}
+            for node in route.nodes:
+                if 1 <= node <= n:
+                    pickup_start[node] = ev.start_times.get(node, 0.0)
+                elif n < node <= 2 * n:
+                    pid = node - n
+                    _, M_r = self.instance.union[
+                        int(self.passengers.loc[pid, "priority"])
+                    ]
+                    if pid in pickup_start:
+                        ride = ev.start_times.get(node, 0.0) - (
+                            pickup_start[pid] + self.s_pickup
+                        )
+                        if ride > M_r + 1e-6:
+                            violators.add(pid)
+
+            if not violators:
+                repaired.append(route)
+                continue
+
+            # Keep non-violating passengers in this route.
+            kept_nodes = [
+                nd for nd in route.nodes
+                if not (1 <= nd <= n and nd in violators)
+                and not (nd > n and (nd - n) in violators)
+            ]
+            if any(1 <= nd <= n for nd in kept_nodes):
+                repaired.append(Route(
+                    vehicle_id=route.vehicle_id,
+                    vehicle_type=route.vehicle_type,
+                    nodes=kept_nodes,
+                    start_times={k: v for k, v in route.start_times.items() if k in kept_nodes},
+                    loads={k: v for k, v in route.loads.items() if k in kept_nodes},
+                ))
+
+            # Each violating passenger gets a solo route.
+            for pid in sorted(violators):
+                e_i, _ = self.instance.effective_pickup_window(pid)
+                pcoord = self._coord(pid, "pickup")
+                dcoord = self._coord(pid, "delivery")
+                tau_pd = self._tau(pcoord, dcoord)
+                dist = self._dist(pcoord, dcoord)
+                p_start = e_i
+                d_start = p_start + self.s_pickup + tau_pd
+                fc = self.instance.vehicle_fixed_cost("Common")
+                vc = self.cost_per_meter * dist
+                fixed_cost += fc
+                variable_cost += vc
+                repaired.append(Route(
+                    vehicle_id=solo_vid,
+                    vehicle_type="Common",
+                    nodes=[0, pid, pid + n, self.depot_end],
+                    start_times={pid: p_start, pid + n: d_start, 0: 0.0, self.depot_end: 0.0},
+                    loads={pid: 1, pid + n: 0, 0: 0, self.depot_end: 0},
+                ))
+                solo_vid += 1
+
         total = fixed_cost + variable_cost
         return Solution(
             instance_label=f"{self.instance.label}__miope",
             n_passengers=self.n,
-            routes=out_routes,
+            routes=repaired,
             total_cost=total,
             fixed_cost=fixed_cost,
             variable_cost=variable_cost,
             is_feasible=True,
             metadata={
                 "solver": "miope",
-                "n_vehicles_used": len(out_routes),
+                "n_vehicles_used": len(repaired),
                 "n_passengers": self.n,
             },
         )
+
