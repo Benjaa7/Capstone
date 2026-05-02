@@ -76,7 +76,7 @@ class WeightTracker:
     delta_lo: float = 1.05
     delta_hi: float = 1.10
     w_min: float = 1e-3
-    w_max: float = 1e6
+    w_max: float = 1e4
     rng: np.random.Generator = field(default_factory=lambda: np.random.default_rng(0))
 
     def _adjust(self, w: float, violated: bool) -> float:
@@ -121,11 +121,19 @@ def evaluate_route(route: Route, instance: "Instance") -> _RouteEval:
     starting at ``0`` (depot) and ending at ``2n+1`` (depot end). Pickup and
     delivery nodes are interleaved in any order; this function checks that
     each delivery comes after its pickup.
+
+    Solo-trip clause (MILP constraint): if ``τ_direct(i) > M_r_i``, passenger
+    ``i`` must travel alone (load ≤ 1 between their pickup and delivery).
+    Violations are counted in ``v.q`` (capacity-type).
+    The set of such passengers is cached on the instance for performance.
     """
     n = instance.n_passengers()
     s_pickup = float(instance.others["pickup_duration"])
     s_delivery = float(instance.others["delivery_duration"])
     cost_per_meter = float(instance.others["cost_per_meter"])
+
+    # Solo-trip passengers: cached on instance to avoid recomputing each call.
+    solo_pids: set[int] = instance.solo_passenger_ids
 
     nodes = list(route.nodes)
     if not nodes:
@@ -182,6 +190,9 @@ def evaluate_route(route: Route, instance: "Instance") -> _RouteEval:
             load += 1
             if load > cap:
                 v.q += load - cap
+            # Solo-trip clause: passenger with τ_direct > M_r must travel alone.
+            if pid in solo_pids and load > 1:
+                v.q += load - 1  # penalise every co-passenger present at pickup
             pickup_times[pid] = start
             times[node] = start
             loads[node] = load
@@ -209,9 +220,14 @@ def evaluate_route(route: Route, instance: "Instance") -> _RouteEval:
             time_now = start + s_delivery
         last_coord = coord
 
-    # Sindical: count disallowed pairs
+    # Sindical: count disallowed violations.
+    # Rule: at most 2 categories, and they must be consecutive (|a-b| <= 1).
+    # We count one violation per broken rule instance.
     cats = sorted(categories_seen)
-    u_count = max(0, len(cats) - 2)
+    u_count = 0
+    if len(cats) > 2:
+        # Each category beyond the first two is a separate violation.
+        u_count += len(cats) - 2
     for a, b in zip(cats, cats[1:], strict=False):
         if abs(a - b) > 1:
             u_count += 1

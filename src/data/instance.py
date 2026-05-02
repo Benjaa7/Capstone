@@ -59,6 +59,7 @@ class Instance:
     _pax_cache: dict[int, dict] = field(default_factory=dict, repr=False)
     _eff_pickup_cache: dict[int, tuple[float, float]] = field(default_factory=dict, repr=False)
     _vehicle_cache: dict[str, dict] = field(default_factory=dict, repr=False)
+    _solo_cache: set[int] | None = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
     # Construction
@@ -270,3 +271,24 @@ class Instance:
         e_eff, _ = self.effective_pickup_window(pid)
         e_raw = self.pax_dict(int(pid))["e_i"]
         return e_eff < e_raw - 1.0
+
+    @property
+    def solo_passenger_ids(self) -> set[int]:
+        """Set of passenger ids whose direct travel time exceeds their M_r limit.
+
+        These passengers must travel alone (load ≤ 1 between their pickup and
+        delivery) per the MILP solo-trip clause. Computed once and cached.
+        """
+        if self._solo_cache is not None:
+            return self._solo_cache
+        solo: set[int] = set()
+        for _, row in self.passengers.iterrows():
+            pid = int(row["id"])
+            info = self.pax_dict(pid)
+            _, M_r = self.union[info["priority"]]
+            co_p = (info["pickup_lat"], info["pickup_lon"])
+            co_d = (info["delivery_lat"], info["delivery_lon"])
+            if self.tau(co_p, co_d) > M_r:
+                solo.add(pid)
+        self._solo_cache = solo
+        return self._solo_cache

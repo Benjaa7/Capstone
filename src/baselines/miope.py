@@ -201,7 +201,7 @@ class MiopeSolver:
         routes: list[_RouteState] = []
         next_vehicle_id = 0
 
-        # Stocks remaining
+        # Stocks remaining (used to prefer Common over Large when both work).
         stock_common = self.instance.vehicle_stock("Common")
         stock_large = self.instance.vehicle_stock("Large")
 
@@ -219,7 +219,9 @@ class MiopeSolver:
                 routes[idx] = new_state
                 continue
 
-            # No active route accepts: open a new one. Prefer Common (cheaper) unless capacity warrants Large.
+            # No active route accepts: open a new one.
+            # Prefer Common (cheaper); fall back to Large; then open ignoring
+            # stock limit (ALNS will repair infeasibilities afterward).
             opened: _RouteState | None = None
             for vtype in ("Common", "Large"):
                 if vtype == "Common" and stock_common <= 0:
@@ -238,11 +240,42 @@ class MiopeSolver:
                     stock_large -= 1
                 next_vehicle_id += 1
                 break
+
             if opened is None:
-                raise RuntimeError(
-                    f"No available vehicle could serve passenger {pid}. "
-                    "The fleet stock is exhausted or constraints are infeasible."
+                # Stock exhausted or constraints prevent any insertion.
+                # Force a solo Common route (ALNS will repair if infeasible).
+                import warnings
+                warnings.warn(
+                    f"MIOPE: passenger {pid} forced into solo route "
+                    f"(stock_common={stock_common}, stock_large={stock_large}). "
+                    "ALNS will repair if needed.",
+                    stacklevel=2,
                 )
+                vtype = "Common" if stock_common > 0 else "Large"
+                fresh = self._new_route(next_vehicle_id, vtype)
+                # Insert directly without feasibility checks.
+                row = self.passengers.loc[pid]
+                priority = int(row["priority"])
+                e_i, sigma = self.instance.effective_pickup_window(pid)
+                pickup_node = pid
+                delivery_node = pid + self.n
+                pickup_time = e_i
+                delivery_time = pickup_time + self.s_pickup + self._tau(
+                    self._coord(pid, "pickup"), self._coord(pid, "delivery")
+                )
+                fresh.nodes += [pickup_node, delivery_node]
+                fresh.start_times[pickup_node] = pickup_time
+                fresh.start_times[delivery_node] = delivery_time
+                fresh.loads[pickup_node] = 1
+                fresh.loads[delivery_node] = 0
+                fresh.categories.add(priority)
+                opened = fresh
+                if vtype == "Common":
+                    stock_common -= 1
+                else:
+                    stock_large -= 1
+                next_vehicle_id += 1
+
             routes.append(opened)
 
         return self._finalize(routes)

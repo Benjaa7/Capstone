@@ -121,7 +121,6 @@ def run_alns(instance: Instance, config: ALNSConfig | None = None) -> ALNSResult
                 print(f"[iter {iteration}] operator {d_name}/{r_name} failed: {exc}")
             continue
 
-        refresh_solution_metrics(candidate, instance)
         cand_cost, cand_viol = evaluate_solution(candidate, instance)
         cand_score = penalised_score(cand_cost, cand_viol, weights)
 
@@ -156,12 +155,21 @@ def run_alns(instance: Instance, config: ALNSConfig | None = None) -> ALNSResult
                 reference_sol = copy.deepcopy(best_sol)
                 refresh_solution_metrics(reference_sol, instance)
                 ref_cost, ref_viol = evaluate_solution(reference_sol, instance)
-                reference_score = penalised_score(ref_cost, ref_viol, weights)
-                # Reset penalty weights to keep them from being saturated.
+                # Reset penalty weights so they don't stay saturated.
                 weights.alpha = weights.beta = weights.gamma = weights.epsilon = weights.phi = 1.0
+                reference_score = penalised_score(ref_cost, ref_viol, weights)
             else:
-                reference_sol = candidate
-                reference_score = cand_score
+                # No feasible solution yet — only accept the candidate as new
+                # reference if it actually improves the current reference.
+                if cand_score < reference_score - 1e-6:
+                    reference_sol = candidate
+                    reference_score = cand_score
+                # Also partially reset weights to avoid saturation stagnation.
+                weights.alpha = min(weights.alpha, 100.0)
+                weights.beta = min(weights.beta, 100.0)
+                weights.gamma = min(weights.gamma, 100.0)
+                weights.epsilon = min(weights.epsilon, 100.0)
+                weights.phi = min(weights.phi, 100.0)
             iters_since_improve = 0
 
         # Penalty-weight update for next iteration.
@@ -178,7 +186,8 @@ def run_alns(instance: Instance, config: ALNSConfig | None = None) -> ALNSResult
                 f"[iter {iteration:5d}] best={best_str:>10s}  "
                 f"ref_score={reference_score:.0f}  "
                 f"cand_cost={cand_cost:.0f}  feas={cand_viol.is_clean()}  "
-                f"d={d_name:>20s}  r={r_name:>10s}"
+                f"d={d_name:>20s}  r={r_name:>10s}",
+                flush=True,
             )
 
     elapsed_total = time.perf_counter() - started

@@ -39,11 +39,19 @@ RepairFn = Callable[
 # ---------------------------------------------------------------------------
 def _insert_into_route(route: Route, pid: int, p_pos: int, d_pos: int, n: int) -> Route:
     """Return a clone of ``route`` with pickup at ``p_pos`` and delivery at
-    ``d_pos`` (after pickup)."""
+    ``d_pos`` (after pickup).
+
+    ``p_pos`` and ``d_pos`` are indices *into the original node list*.
+    After inserting the pickup at ``p_pos``, every subsequent index shifts
+    by 1, so the delivery must be placed at ``d_pos + 1`` whenever
+    ``d_pos >= p_pos`` (which is always true since d_pos >= p_pos by
+    construction in the search loops).
+    """
     new_nodes = list(route.nodes)
     new_nodes.insert(p_pos, pid)
-    # After inserting pickup, the previous d_pos shifts by 1 if d_pos > p_pos.
-    new_nodes.insert(d_pos + 1 if d_pos > p_pos else d_pos, pid + n)
+    # Pickup inserted at p_pos ⟹ all positions >= p_pos shift by 1.
+    # Because d_pos >= p_pos always holds, we unconditionally add 1.
+    new_nodes.insert(d_pos + 1, pid + n)
     return Route(
         vehicle_id=route.vehicle_id,
         vehicle_type=route.vehicle_type,
@@ -55,14 +63,17 @@ def _insert_into_route(route: Route, pid: int, p_pos: int, d_pos: int, n: int) -
 
 def _try_insertion_in_route(
     route: Route, pid: int, n: int, instance: Instance, weights: WeightTracker
-) -> tuple[float, int, int] | None:
+) -> tuple[int, float, int, int] | None:
     """Find the best (p_pos, d_pos) pair to insert ``pid`` in ``route``.
 
-    Scores insertions by ``(num_new_violations, score_increment)``: a
-    placement that introduces new violations is *strictly worse* than any
-    feasible alternative. This avoids the well-known pathology where a
-    cheap-but-infeasible placement is preferred during early iterations
-    when the penalty weights are still small.
+    Returns ``(new_viols, score_increment, p_pos, d_pos)`` for the best
+    placement, where ``new_viols`` counts violation *types* introduced
+    (0 = strictly feasibility-non-worsening). Returns ``None`` only if the
+    route has no valid insertion positions.
+
+    Primary sort key is ``(new_viols, score_increment)`` so that a placement
+    that introduces no new violations is always preferred over a cheaper-but-
+    infeasible one, regardless of the current penalty weight magnitudes.
     """
     base_eval = evaluate_route(route, instance)
     base_score = penalised_score(base_eval.cost, base_eval.violations, weights)
@@ -75,14 +86,13 @@ def _try_insertion_in_route(
             new_route = _insert_into_route(route, pid, p_pos, d_pos, n)
             ev = evaluate_route(new_route, instance)
             v_new = ev.violations
-            # Count NEW violations introduced (categories where the inserted
-            # request made things strictly worse).
-            new_viols = 0
-            new_viols += int(v_new.q > base_v.q + 1e-6)
-            new_viols += int(v_new.r > base_v.r + 1e-6)
-            new_viols += int(v_new.d > base_v.d + 1e-6)
-            new_viols += int(v_new.t > base_v.t + 1e-6)
-            new_viols += int(v_new.u > base_v.u + 1e-6)
+            new_viols = (
+                int(v_new.q > base_v.q + 1e-6)
+                + int(v_new.r > base_v.r + 1e-6)
+                + int(v_new.d > base_v.d + 1e-6)
+                + int(v_new.t > base_v.t + 1e-6)
+                + int(v_new.u > base_v.u + 1e-6)
+            )
             new_score = penalised_score(ev.cost, v_new, weights)
             inc = new_score - base_score
             key = (new_viols, float(inc))
@@ -91,8 +101,8 @@ def _try_insertion_in_route(
 
     if best is None:
         return None
-    _key, p, d = best
-    return _key[1], p, d
+    key, p, d = best
+    return key[0], key[1], p, d
 
 
 def _open_new_route(sol: Solution, instance: Instance) -> Route:
@@ -135,6 +145,28 @@ def _replace_route(sol: Solution, route: Route) -> Solution:
         is_feasible=False,
         metadata=dict(sol.metadata),
     )
+_MAX_ROUTES_TO_SEARCH = 40  # geographic pre-filter threshold for best_insertion
+
+
+def _route_proximity_key(
+    route: "Route", pid_pickup: tuple[float, float], instance: "Instance", n: int
+) -> float:
+    """Cheap Euclidean proxy distance from ``pid_pickup`` to the last passenger
+    node in ``route`` (used for geographic pre-filtering in best_insertion)."""
+    last_pax = next(
+        (nd for nd in reversed(route.nodes) if 1 <= nd <= 2 * n), None
+    )
+    if last_pax is None:
+        return float("inf")
+    info_nd = last_pax if last_pax <= n else last_pax - n
+    info = instance.pax_dict(info_nd)
+    if last_pax <= n:
+        coord = (info["pickup_lat"], info["pickup_lon"])
+    else:
+        coord = (info["delivery_lat"], info["delivery_lon"])
+    dlat = pid_pickup[0] - coord[0]
+    dlon = pid_pickup[1] - coord[1]
+    return dlat * dlat + dlon * dlon  # squared Euclidean (no sqrt needed for ranking)
 
 
 # ---------------------------------------------------------------------------
@@ -147,30 +179,66 @@ def best_insertion(
     instance: Instance,
     weights: WeightTracker,
 ) -> Solution:
-    """Insert each removed pid in the lowest-scoring position over all routes."""
+    """Insert each removed pid in the lowest-scoring position over all routes.
+
+    Primary sort key: ``(new_viols, score_increment)`` so feasibility-
+    non-worsening placements are always preferred. A fresh solo route is
+    also evaluated and chosen when it beats all existing routes.
+
+    For large instances (> ``_MAX_ROUTES_TO_SEARCH`` routes), only the
+    geographically closest routes are searched to keep per-iteration time
+    within budget.
+    """
     n = sol.n_passengers
     pending = list(removed)
     rng.shuffle(pending)
 
     for pid in pending:
-        best: tuple[float, int, int, int] | None = None  # (inc, route_idx, p_pos, d_pos)
-        for r_idx, route in enumerate(sol.routes):
+        info = instance.pax_dict(pid)
+        pid_pickup = (info["pickup_lat"], info["pickup_lon"])
+
+        # Geographic pre-filter: evaluate only nearby routes when fleet is large.
+        if len(sol.routes) > _MAX_ROUTES_TO_SEARCH:
+            routes_to_search = sorted(
+                range(len(sol.routes)),
+                key=lambda i: _route_proximity_key(sol.routes[i], pid_pickup, instance, n),
+            )[:_MAX_ROUTES_TO_SEARCH]
+        else:
+            routes_to_search = list(range(len(sol.routes)))
+
+        best: tuple[tuple[int, float], int, int, int] | None = None
+        # (key=(new_viols, inc), route_idx, p_pos, d_pos)
+        for r_idx in routes_to_search:
+            route = sol.routes[r_idx]
             placement = _try_insertion_in_route(route, pid, n, instance, weights)
             if placement is None:
                 continue
-            inc, p_pos, d_pos = placement
-            if best is None or inc < best[0]:
-                best = (inc, r_idx, p_pos, d_pos)
+            nv, inc, p_pos, d_pos = placement
+            key: tuple[int, float] = (nv, float(inc))
+            if best is None or key < best[0]:
+                best = (key, r_idx, p_pos, d_pos)
 
-        if best is not None:
+        # Evaluate opening a brand-new single-passenger route.
+        new_route_candidate = _open_new_route(sol, instance)
+        new_route_candidate = _insert_into_route(new_route_candidate, pid, 1, 1, n)
+        ev_nr = evaluate_route(new_route_candidate, instance)
+        nr_viols = (
+            int(ev_nr.violations.q > 1e-6)
+            + int(ev_nr.violations.r > 1e-6)
+            + int(ev_nr.violations.d > 1e-6)
+            + int(ev_nr.violations.t > 1e-6)
+            + int(ev_nr.violations.u > 1e-6)
+        )
+        nr_key: tuple[int, float] = (
+            nr_viols,
+            penalised_score(ev_nr.cost, ev_nr.violations, weights),
+        )
+
+        if best is not None and best[0] <= nr_key:
             _, r_idx, p_pos, d_pos = best
-            new_route = _insert_into_route(sol.routes[r_idx], pid, p_pos, d_pos, n)
-            sol = _replace_route(sol, new_route)
+            sol = _replace_route(sol, _insert_into_route(sol.routes[r_idx], pid, p_pos, d_pos, n))
         else:
-            # Open a new route as last resort.
-            new_route = _open_new_route(sol, instance)
-            new_route = _insert_into_route(new_route, pid, 1, 1, n)
-            sol = _replace_route(sol, new_route)
+            sol = _replace_route(sol, new_route_candidate)
 
     return sol
 
@@ -227,7 +295,7 @@ def _regret_insertion(
                 placement = _try_insertion_in_route(route, pid, n, instance, weights)
                 if placement is None:
                     continue
-                inc, p_pos, d_pos = placement
+                _nv, inc, p_pos, d_pos = placement
                 increments.append((inc, r_idx, p_pos, d_pos))
             if not increments:
                 # Force a new route — high penalty placeholder so this pid is processed next.
@@ -244,30 +312,36 @@ def _regret_insertion(
             score = (-regret, increments[0][0])  # tiebreak by lower insertion cost
             if best_overall is None or score < (-best_overall[0], best_overall[1]):
                 best_overall = (regret, increments[0][0], pid, increments[0][2], increments[0][3])
-                # store route_idx separately
         else:
             # 'else' on the for-loop runs when no break happened.
             if best_overall is None:
                 break  # nothing more to insert
             regret, _inc, pid, p_pos, d_pos = best_overall
-            # Find the route_idx again (the cached state may be stale).
+            # Re-scan to find best_route_idx AND its corresponding p_pos/d_pos
+            # (the cached p_pos/d_pos above belong to whichever route gave the
+            # lowest cost in the first scan pass, but sol.routes may have changed
+            # since then; we re-evaluate to get a consistent triple).
             best_route_idx = -1
             best_inc = float("inf")
+            best_p_pos = p_pos
+            best_d_pos = d_pos
             for r_idx, route in enumerate(sol.routes):
                 placement = _try_insertion_in_route(route, pid, n, instance, weights)
                 if placement is None:
                     continue
-                inc, _, _ = placement
+                _nv, inc, rp, rd = placement
                 if inc < best_inc:
                     best_inc = inc
                     best_route_idx = r_idx
+                    best_p_pos = rp
+                    best_d_pos = rd
             if best_route_idx == -1:
                 new_route = _open_new_route(sol, instance)
                 new_route = _insert_into_route(new_route, pid, 1, 1, n)
                 sol = _replace_route(sol, new_route)
             else:
                 new_route = _insert_into_route(
-                    sol.routes[best_route_idx], pid, p_pos, d_pos, n
+                    sol.routes[best_route_idx], pid, best_p_pos, best_d_pos, n
                 )
                 sol = _replace_route(sol, new_route)
             pending.remove(pid)
