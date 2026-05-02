@@ -1,0 +1,52 @@
+En este capítulo se presentan y analizan los resultados computacionales obtenidos con los tres métodos implementados: la heurística miope (línea base), el ALNS con tiempos estáticos y el ALNS con tiempos dependientes vía XGBoost (componente TD).
+
+\section{Resultados del Caso Base}
+
+El Caso Base consiste en 30 pasajeros seleccionados mediante muestreo estratificado por categoría (distribución aproximada 14/35/43/7\%) sobre la instancia AM de la mañana, con flota heterogénea (Common y Large) y tiempos estáticos.
+
+
+A partir de la tabla \ref{tab:comparativa resultados caso base}, se observa que el ALNS logró una reducción del 2,91\% sobre la heurística miope en el Caso Base, fundamentalmente reduciendo el costo variable de desplazamiento mediante una consolidación más eficiente de las rutas.
+
+\section{Resultados de la instancia AM completa}
+
+Para la instancia AM completa, es decir, de 620 pasajeros, se ejecutó el ALNS durante una hora de tiempo de cómputo, con la solución miope como punto de partida (\ref{tab:comparativa caso base AM comp}).
+
+
+
+La mejora (\ref{tab:ev mejora am comp}) se concentra en las primeras 100 iteraciones (5,8\%) y desacelera a partir de la iteración 1.100, sugiriendo convergencia a un óptimo local. La reducción de 241 a 221 vehículos ($-8,3\%$ de flota) evidencia que el ALNS logra consolidar rutas subóptimas de la miope.
+
+\section{Análisis de los operadores ALNS}
+
+Los pesos finales de la ruleta adaptativa reflejan la contribución relativa de cada operador, los cuales se observan en \ref{tab: pesos finales am comp}. La combinación ganadora fue \textbf{Related Removal + Best Insertion}: eliminar un cluster de pasajeros geográficamente similares y reinsertarlos con mínimo costo permite reasignarlos en rutas más compactas. El \textit{Category-violation Removal} (operador propio) tuvo un peso modesto, lo que indica que las violaciones sindicales son relativamente infrecuentes en la solución de referencia una vez el ALNS converge.
+
+\section{Rol de las penalizaciones dinámicas}
+
+Durante gran parte del run, el ALNS operó con \texttt{feas=False}: exploró activamente el espacio infactible. Sin la función de evaluación penalizada $f(s) = c(s) + \alpha q + \beta r + \gamma d + \varepsilon t + \phi u$, el ALNS estaría confinado al espacio factible — una región mucho más pequeña dado que las restricciones sindicales fragmentan la vecindad.
+
+El mecanismo de diversificación forzada (cada 500 iteraciones sin mejora del incumbente, se resetea la solución de referencia al mejor incumbente y se reinician los pesos $\alpha, \beta, \ldots$ a 1) fue fundamental para evitar la saturación de los pesos de penalización, que de otro modo convergerían a valores extremos y sesgarían toda la búsqueda hacia la factibilidad estricta.
+
+\section{Resultados del modelo predictivo de tiempos (XGBoost)}
+
+El modelo XGBoost, entrenado sobre 10.808 viajes reales de Santiago (1–14 de marzo de 2026), alcanza:
+\begin{itemize}
+    \item \textbf{MAE:} 88,6 s (1,48 min) sobre los 2.702 viajes del conjunto de prueba.
+    \item \textbf{RMSE:} 124,2 s (2,07 min).
+    \item $\mathbf{R^2}$\textbf{ (log-ratio):} 0,154.
+\end{itemize}
+
+El bajo $R^2$ sobre el log-ratio confirma que el proveedor de tiempos es ya un predictor preciso (razón real/predicha promedio = 0,994), y la corrección del XGBoost es modesta. La componente TD no deteriora el rendimiento computacional: el pre-cómputo batch tarda 10 s y el lookup permanece en $O(1)$ (275.000 llamadas/s verificadas en prueba).
+
+\subsection{Comparación estático vs TD (Caso Base 30 pasajeros)}
+
+
+
+A partir de la tabla \ref{tab: comp alns estatico vs td base}, se identifica que el modo TD logra una mejora del 2,91\% donde el estático no mejora, en menor cantidad de iteraciones. Este resultado preliminar sugiere que los tiempos XGBoost generan una topología de costos ligeramente diferente que permite al ALNS encontrar rutas más eficientes en el horizonte de 2 minutos. Se requieren experimentos de mayor duración para confirmar si esta diferencia es estadísticamente robusta.
+
+\section{Limitaciones identificadas}
+
+\begin{enumerate}
+    \item \textbf{MILP sin incumbente en 30 pax}: Gurobi no encontró solución factible en 10 minutos sobre el Caso Base con las restricciones sindicales estrictas, incluso con warm-start de la miope. El bound dual alcanzado fue 180.354 CLP, indicando que el óptimo teórico es significativamente menor al costo miope (453.208 CLP). Una implementación más sofisticada (estrategias de branch-and-cut específicas para restricciones sindicales) podría resolver este problema.
+    \item \textbf{XGBoost fuera de distribución}: el conjunto de entrenamiento cubre viajes de 4 km de promedio, frente a los 16,6 km de la instancia AM. La estrategia de entrenar sobre el log-ratio mitiga el sesgo de extrapolación, pero el $R^2$ bajo indica que la señal temporal del modelo es débil.
+    \item \textbf{Restricción de pasajero solo}: pasajeros cuyo viaje directo supera $M_{r_i}$ deben ir solos en su vehículo. La implementación detecta estos casos como aviso pero no los maneja óptimamente en el motor ALNS.
+    \item \textbf{Factibilidad con tiempos XGBoost}: el modelo predice una corrección al tiempo del proveedor mediante un log-ratio. Si lo subestima, la ruta optimizada podría resultar infactible en la ejecución real (el profesional llegaría tarde a su turno o pasaría más tiempo del permitido en el vehículo). La estrategia de log-ratio acota la desviación a $\pm$25\% del tiempo del proveedor en una desviación estándar, pero no elimina el riesgo. El uso de tiempos estáticos del proveedor (Caso Base) es más conservador desde el punto de vista de la factibilidad.
+\end{enumerate}

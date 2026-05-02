@@ -166,6 +166,160 @@
 
 
 \clearpage
+\section{Operadores ALNS}
+\label{anexo:operadores}
+
+\begin{table}[h]
+\centering
+\caption{Operadores de destrucción y reparación del ALNS}
+\label{tab:operadores}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l p{8.5cm} @{}}
+\toprule
+\textbf{Operador} & \textbf{Descripción} \\ \midrule
+\multicolumn{2}{l}{\textit{Destrucción (activos para todo $n$)}} \\ \addlinespace
+Random Removal & Elimina solicitudes al azar de rutas al azar (diversificación). \\ \addlinespace
+Worst Removal & Elimina las solicitudes con mayor contribución marginal al costo. \\ \addlinespace
+Related Removal & Tipo Shaw: elimina solicitudes similares a una semilla por distancia, similitud de ventanas y misma categoría sindical. \\ \addlinespace
+Load-violation Removal & Prioriza las solicitudes que más contribuyen a $q(s)$; recae en Worst si no hay exceso. \\ \addlinespace
+Time-based Removal & Prioriza violaciones activas de $r(s)$ y $d(s)$. \\ \addlinespace
+Category-violation Removal & Adición propia: remueve solicitudes que causan violaciones de \eqref{eq:r13}--\eqref{eq:r14}. \\ \addlinespace
+Route Removal & Elimina rutas completas de baja ocupación; ataca directamente el costo fijo $F^{t(k)} y_k$. \\ \midrule
+\multicolumn{2}{l}{\textit{Reparación (activos para todo $n$)}} \\ \addlinespace
+Best Insertion & Selecciona vía ruleta entre las tres mejores posiciones por incremento mínimo de \eqref{eq:eval-ours}. \\ \addlinespace
+Random Insertion & Orden aleatorio de inserción; posición elegida también al azar. \\ \addlinespace
+Zero-load Insertion & Novel de \cite{Pilati2025}: inserta en posiciones donde el vehículo está vacío. \\ \midrule
+\multicolumn{2}{l}{\textit{Reparación (solo para $n \leq 100$)}} \\ \addlinespace
+Regret-2 Insertion & Prioriza solicitudes cuyo costo de inserción se dispara entre la 1ª y 2ª mejor posición. \\ \addlinespace
+Regret-3 Insertion & Variante con la 3ª posición; útil para pasajeros críticos (categoría 4, ventana de 5 min). \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+
+
+\clearpage
+\section{Tablas resultados caso base}
+
+
+\begin{table}[h]
+\centering
+\caption{Resultados comparativos — Caso Base (30 pasajeros, tiempos estáticos)}
+\label{tab:comparativa resultados caso base}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r r r r @{}}
+\toprule
+\textbf{Método} & \textbf{Costo total (CLP)} & \textbf{Costo fijo} & \textbf{Costo variable} & \textbf{Vehículos} \\ \midrule
+Heurística miope & 453.208 & 28.600 & 424.608 & 13 \\
+ALNS (estático) & 440.005 & 28.600 & 411.405 & 13 \\
+\midrule
+\textbf{Mejora ALNS} & \textbf{+2,91\%} & 0\% & +3,1\% & 0 \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+
+
+\begin{table}[h]
+\centering
+\caption{Resultados comparativos — Instancia AM completa (620 pasajeros)}
+\label{tab:comparativa caso base AM comp}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r r r @{}}
+\toprule
+\textbf{Método} & \textbf{Costo total (CLP)} & \textbf{Vehículos} & \textbf{Mejora} \\ \midrule
+Heurística miope & 9.197.549 & 241 & --- \\
+ALNS (estático, 1h) & 7.891.641 & 221 & +14,20\% \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+
+\begin{table}[h]
+\centering
+\caption{Evolución de la mejora en la instancia AM completa}
+\label{tab:ev mejora am comp}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} r r r r @{}}
+\toprule
+\textbf{Iteración} & \textbf{Mejor costo (CLP)} & \textbf{Mejora vs miope} & \textbf{Tiempo (min)} \\ \midrule
+100  & 8.668.090 & +5,8\%  & 5,9  \\
+400  & 8.168.327 & +11,2\% & 23,6 \\
+1100 & 8.087.968 & +12,1\% & 65,1 \\
+2500 & 7.894.178 & +14,2\% & 147,8 \\
+3022 & 7.891.641 & +14,2\% & 178,5 \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+
+\begin{table}[h]
+\centering
+\caption{Pesos finales de los operadores destroy y repair (instancia AM completa)}
+\label{tab: pesos finales am comp}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r l r @{}}
+\toprule
+\textbf{Destroy} & \textbf{Peso final} & \textbf{Repair} & \textbf{Peso final} \\ \midrule
+Related Removal  & 0,182 & Best Insertion  & 0,178 \\
+Random Removal   & 0,162 & Zero-load Insertion & 0,068 \\
+Time-based       & 0,119 & Random Insertion & 0,050 \\
+Worst Removal    & 0,081 & Regret-2 & --- \\
+Route Removal    & 0,061 & Regret-3 & --- \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Comparación ALNS estático vs TD — Caso Base 30 pasajeros, 2 minutos}
+\label{tab: comp alns estatico vs td base}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r r r @{}}
+\toprule
+\textbf{Modo} & \textbf{Costo ALNS (CLP)} & \textbf{Mejora vs miope} & \textbf{Iters} \\ \midrule
+Estático (matrices avg) & 453.208 & +0,0\% & 2.288 \\
+TD (XGBoost batch) & 440.005 & +2,91\% & 1.062 \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+
+
+
+
+
+
+\clearpage
+\section{Pseudocódigo del ALNS}
+\label{anexo:pseudocodigo}
+
+\begin{algorithm}[H]
+\caption{ALNS para el TD-HDARP (adaptado de \cite{Pilati2025,Ropke2006})}
+\label{alg:alns}
+\begin{algorithmic}[1]
+\Require Instancia $I$, $\sigma_1=10$, $\sigma_2=2$, $\sigma_3=0$, $\rho=0{,}1$, $\delta\sim U(0{,}05,0{,}10)$, $t_{\mathrm{seg}}$, $t_{\mathrm{last}}$, $t_{\mathrm{tot}}$
+\State $s_0 \gets \textsc{HeuristicaMiope}(I)$ \Comment{Warm-start: solución factible inicial}
+\State $s^* \gets s_0$; \quad $s_{\text{best}} \gets s_0$; \quad $\text{iter\_sin\_mejora} \gets 0$
+\State Inicializar $w_i \gets 1$ para cada operador; \quad $\alpha=\beta=\gamma=\varepsilon=\phi \gets 1$
+\While{tiempo transcurrido $< t_{\mathrm{tot}}$}
+    \State $\mathcal{D} \gets \textsc{Ruleta}(w_{\text{destroy}})$; \quad $\mathcal{R} \gets \textsc{Ruleta}(w_{\text{repair}})$
+    \State $k \gets \textsc{Uniforme}(k_{\min}, k_{\max})$ \Comment{Número de solicitudes a destruir}
+    \State $(s_{\text{parcial}}, \text{removidos}) \gets \mathcal{D}(s^*, k)$
+    \State $s' \gets \mathcal{R}(s_{\text{parcial}}, \text{removidos})$
+    \State Actualizar $\alpha, \beta, \gamma, \varepsilon, \phi$ según violaciones en $s'$ \Comment{multiplicar por $\delta$ si viola}
+    \State $f' \gets c(s') + \alpha q(s') + \beta r(s') + \gamma d(s') + \varepsilon t(s') + \phi u(s')$
+    \If{$s'$ factible \textbf{y} $c(s') < c(s_{\text{best}})$}
+        \State $s_{\text{best}} \gets s'$; \quad $s^* \gets s'$; \quad score $\gets \sigma_1$; \quad $\text{iter\_sin\_mejora} \gets 0$
+    \ElsIf{$f' < f(s^*)$}
+        \State $s^* \gets s'$; \quad score $\gets \sigma_2$; \quad $\text{iter\_sin\_mejora} \gets 0$
+    \Else
+        \State score $\gets \sigma_3$; \quad $\text{iter\_sin\_mejora} \gets \text{iter\_sin\_mejora} + 1$
+    \EndIf
+    \If{$\text{iter\_sin\_mejora} \geq t_{\mathrm{last}}$} \Comment{Diversificación forzada}
+        \State $s^* \gets s_{\text{best}}$; \quad $\alpha=\beta=\gamma=\varepsilon=\phi \gets 1$; \quad $\text{iter\_sin\_mejora} \gets 0$
+    \EndIf
+    \State Actualizar $w_i$ mediante ruleta cada $t_{\mathrm{seg}}$ iteraciones: $w_{i} \gets w_i(1-\rho) + \rho\,\pi_i/\theta_i$
+\EndWhile
+\State \Return $s_{\text{best}}$
+\end{algorithmic}
+\end{algorithm}
+
+\clearpage
 \section{Carta Gantt}
 \begin{figure}[h] 
     \centering

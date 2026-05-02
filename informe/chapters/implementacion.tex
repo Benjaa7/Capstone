@@ -1,0 +1,105 @@
+Este capítulo describe el entorno tecnológico, la arquitectura del proyecto y las decisiones de diseño adoptadas durante la implementación del modelo TD-HDARP.
+
+\section{Entorno y stack tecnológico}
+
+La implementación se desarrolló íntegramente en Python 3.11, organizada como un paquete modular en \texttt{src/}. Las dependencias principales son:
+
+\begin{itemize}
+    \item \textbf{Gurobi 10.0} con licencia académica: solucionador exacto para el MILP del Caso Base.
+    \item \textbf{gurobipy}: interfaz Python para Gurobi.
+    \item \textbf{XGBoost 2.0}: modelo de boosting para la predicción de tiempos de viaje.
+    \item \textbf{pandas / openpyxl}: carga y procesamiento de los datos operacionales.
+    \item \textbf{numpy}: álgebra matricial y cálculo de distancias.
+    \item \textbf{scikit-learn}: métricas de evaluación y utilidades de validación cruzada.
+\end{itemize}
+
+\section{Arquitectura del proyecto}
+
+El repositorio se organiza en los siguientes módulos:
+
+\begin{itemize}
+    \item \texttt{src/data/}: carga de datos, clase \texttt{Instance} y selección del Caso Base.
+    \item \texttt{src/milp/}: formulación MILP completa (clase \texttt{TDHDARPModel}).
+    \item \texttt{src/alns/}: heurística constructiva, operadores destroy/repair, motor principal.
+    \item \texttt{src/baselines/}: heurística miope como línea base comparativa.
+    \item \texttt{src/predictive/}: ingeniería de características, entrenamiento y predicción XGBoost.
+    \item \texttt{scripts/}: scripts de ejecución para MILP, ALNS y comparaciones.
+    \item \texttt{tests/}: suite de pruebas unitarias (pytest).
+    \item \texttt{results/}: soluciones serializadas en JSON y modelo XGBoost.
+\end{itemize}
+
+\section{Implementación del MILP}
+
+La clase \texttt{TDHDARPModel} recibe una instancia \texttt{Instance} y construye el modelo Gurobi con las variables $x_{ijk}, y_k, B_{ik}, L_{ik}, u_{rk}$ y las restricciones \eqref{eq:r1}–\eqref{eq:r14} de la Sección~\ref{sec:milp}. Las decisiones de implementación más relevantes son:
+
+\begin{enumerate}
+    \item \textbf{Big-M por arco}: en lugar de un Big-M global, se calcula $M_{ij} = \min(\text{Global}, l_i + s_i + \tau_{ij} - e_j)$ para las restricciones de tiempo, y $M = Q_k + 1$ para las de carga. Esto aprieta la relajación LP y reduce el tiempo de presolve de Gurobi.
+    \item \textbf{Relajación de \textit{pickup\_from}}: para los pasajeros cuyo horario de recogida preferido no permite llegar a tiempo con viaje directo, se relaja $e_i$ al mínimo factible. Esta situación afectó al 50\% de los pasajeros del Caso Base (15/30), lo que confirma que \textit{pickup\_from} es una preferencia informativa, no una restricción dura.
+    \item \textbf{Warm-start con miope}: antes de llamar a \texttt{model.optimize()}, se inicializan las variables con la solución miope. Esto le da a Gurobi un incumbente desde el inicio, acortando el tiempo de búsqueda.
+    \item \textbf{Simetría}: para vehículos del mismo tipo, se agrega $y_{k+1} \leq y_k$, reduciendo el espacio de búsqueda simétrico.
+\end{enumerate}
+
+\section{Implementación del ALNS}
+
+\subsection{Solución inicial}
+Se utiliza la heurística constructiva de \cite{Pilati2025}: ordenar pasajeros por $e_i$ ascendente, sembrar $K = \lceil n / Q_C \rceil$ rutas con un pasajero cada una, e insertar los restantes minimizando una de cuatro métricas de distancia seleccionada aleatoriamente por pasajero.
+
+\subsection{Operadores y rendimiento}
+Los siete operadores de destrucción y cinco de reparación se detallan en la Tabla~\ref{tab:operadores} del Apéndice. Para instancias grandes ($n > 100$ pasajeros), los operadores Regret-2/3 se desactivan automáticamente para mantener las iteraciones bajo 1 segundo, alcanzando $\sim$18 iters/s sobre la instancia AM completa.
+
+\section{Modelo predictivo de tiempos de viaje (XGBoost)}
+
+\subsection{Datos de entrenamiento}
+Se utilizaron las 15.000 observaciones de \texttt{real\_times\_sample.csv}, filtrando los percentiles 5–95 de \texttt{real\_time} para eliminar registros anómalos (tiempos mínimos de 6 s y máximos de 5.881 s). La muestra limpia contiene 13.510 viajes.
+
+\subsection{Ingeniería de características}
+\begin{table}[h]
+\centering
+\caption{Características del modelo XGBoost}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l p{8cm} @{}}
+\toprule
+\textbf{Característica} & \textbf{Descripción} \\ \midrule
+\texttt{haversine\_km} & Distancia haversine en kilómetros (proxy de longitud de ruta) \\
+\texttt{delta\_lat, delta\_lon} & Diferencias de coordenadas (dirección del viaje) \\
+\texttt{orig\_lat/lon, dest\_lat/lon} & Coordenadas absolutas \\
+\texttt{hour\_sin/cos} & Codificación cíclica de la hora del día \\
+\texttt{dow\_sin/cos} & Codificación cíclica del día de la semana \\
+\texttt{predicted\_time} & Estimación del proveedor (señal de línea base) \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Variable objetivo y ajuste del dominio}
+Un análisis preliminar reveló que los viajes del conjunto de entrenamiento tienen una distancia haversine promedio de 4,06 km, mientras que los viajes del problema AM tienen una media de 16,6 km. Entrenar un modelo que prediga el tiempo absoluto generaría extrapolaciones incorrectas para viajes largos.
+
+Para resolver esto, el modelo se entrena sobre la variable $\log(t_{\text{real}} / t_{\text{proveedor}})$: la corrección multiplicativa al tiempo del proveedor. En el conjunto de entrenamiento, esta razón tiene media 0,994 y desviación estándar 0,242, por lo que la predicción del modelo representa una corrección modesta y bien acotada al tiempo ya estimado por el proveedor.
+
+\subsection{Métricas de evaluación}
+La validación se realizó con una partición temporal 80/20 (primeros 10.808 viajes para entrenamiento, últimos 2.702 para prueba):
+
+\begin{table}[h]
+\centering
+\caption{Métricas del modelo XGBoost en hold-out}
+\vspace{0.5em}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l r @{}}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\ \midrule
+MAE (sobre \texttt{real\_time}) & 88,6 s (1,48 min) \\
+RMSE (sobre \texttt{real\_time}) & 124,2 s (2,07 min) \\
+$R^2$ (sobre $\log$-ratio) & 0,154 \\ \bottomrule
+\end{tabular*}
+\end{table}
+
+El $R^2$ bajo sobre el log-ratio indica que el proveedor de tiempos ya es un predictor muy preciso en promedio, y XGBoost aporta solo una corrección marginal. Esto constituye una limitación explícita del componente TD del modelo.
+
+\subsection{Integración eficiente con el ALNS}
+Para que la componente TD no incremente el costo por iteración, se implementó un pre-cómputo en lote (\textit{batch}) al inicio del run:
+
+\begin{enumerate}
+    \item \texttt{Instance.use\_xgboost\_batch()} itera sobre cada franja horaria disponible (04h, 05h, 06h para AM).
+    \item Para cada franja, construye un DataFrame con los 409.600 pares OD de la matriz.
+    \item Realiza inferencia en lote con XGBoost (predicción de $\log$-ratio para todos los pares simultáneamente): $\approx$2,5 s por franja horaria, $\approx$10 s total.
+    \item Almacena los tiempos corregidos en el mismo dict de lookup que las matrices originales.
+\end{enumerate}
+
+Tras el pre-cómputo, \texttt{tau(orig, dest, t)} sigue siendo una búsqueda de diccionario $O(1)$ — idéntica en costo a la versión estática. Las $\sim$275.000 llamadas/segundo observadas en los benchmarks confirman que la integración TD no introduce regresiones de rendimiento.

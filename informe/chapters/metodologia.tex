@@ -63,7 +63,7 @@ f(s) = c(s) + \alpha\, q(s) + \beta\, r(s) + \gamma\, d(s) + \varepsilon\, t(s),
 \end{equation}
 donde $q, r, d, t$ son violaciones de carga, tiempo en vehículo, jornada y ventanas, y los pesos se multiplican (o dividen) por $\delta\sim U(0{,}05,0{,}10)$ según si la restricción se viola o no. Solo soluciones con $f(s)=c(s)$ (estrictamente factibles) pueden ser incumbentes, permitiendo explorar transitoriamente regiones infactibles sin abandonar la dirección hacia el óptimo. Su implementación, validada sobre el \textit{benchmark} de \cite{Parragh2011}, obtiene soluciones a lo más $5\%$ peores en 18 de 20 instancias. Nuestra variante extiende el esquema incorporando flota heterogénea, tiempos dependientes $\tau_{ij}(t)$ y restricciones sindicales categóricas; por ello agregamos un término $\phi\,u(s)$ a \eqref{eq:eval-pilati} (ver Sección~\ref{sec:alns}).
 
-\subsection{Zhao et al. (2022) y Portell \& Lourenço (2024): Tratamiento del Time-Dependency}
+\subsection{Zhao et al. (2022) y Portell \& Lourenço (2024): Tratamiento del TD}
 Dos trabajos recientes validan, desde ángulos complementarios, el manejo de $\tau_{ij}(t)$ en DARP sanitarios. \cite{Zhao2022} estudian un TD-PDARP \textit{single-vehicle} para ambulancias no-emergencia de la Hong Kong Hospital Authority y proponen un procedimiento de evaluación de factibilidad bajo tiempos dependientes de la hora de partida que justifica nuestras matrices horarias escalonadas y la fase de búsqueda local intra-ruta tras cada movimiento destroy--repair (su híbrido ALNS+LS obtiene el óptimo en el $1{,}03\%$ del tiempo de Gurobi). Por su parte, \cite{Portell2024} abordan un DARP heterogéneo ``rico'' (rHDARP) para el transporte de personas con movilidad reducida en Barcelona, integrando flota mixta (taxis y buses adaptados), múltiples depósitos y un modelo predictivo de \textit{machine learning} para estimar $\tau_{ij}(t)$ según hora y día. Es la referencia más cercana al presente caso pues valida simultáneamente los tres ejes que combinamos aquí (heterogeneidad de flota, dependencia temporal y predicción ML); adoptamos explícitamente su arquitectura en dos capas (predictiva con XGBoost, prescriptiva con ALNS/MILP), omitiendo el multi-depósito e incorporando las restricciones sindicales categóricas ausentes en su formulación.
 
 \section{Formalización Matemática del TD-HDARP}
@@ -106,14 +106,14 @@ Dado el tamaño de la instancia completa (620 pasajeros AM; 347 PM) y la intrata
 
 \subsection{Simplificaciones Adoptadas}
 \begin{enumerate}
-    \item \textbf{Tamaño reducido}: se selecciona una submuestra estratificada de 40 pasajeros del turno AM centrada en el pico operativo de las 04:50, preservando la distribución de categorías (aprox.\ $14/35/45/6\%$) y la dispersión geográfica observada en la instancia original.
-    \item \textbf{Flota homogénea}: se considera únicamente vehículos tipo \textsc{Common} ($Q=3$, $F=2\,200$ CLP), eliminando temporalmente la dimensión de selección de tipo. Esto alinea el Caso Base con la configuración de \cite{Pilati2025}, facilitando la comparación directa de operadores ALNS sin confundirlos con efectos de heterogeneidad.
-    \item \textbf{Filtrado de \textit{outliers}}: se descartan observaciones de la muestra de tiempos reales con $\texttt{real\_time}$ fuera del rango intercuartil extendido (percentiles 5--95) antes de entrenar el estimador temporal, reduciendo el sesgo de casos anómalos (tiempos de 6 s o 5\,881 s identificados en el Capítulo~\ref{ch:problema}).
-    \item \textbf{Dependencia temporal preservada}: se mantiene la estructura $\tau_{ij}(t)$ con las tres matrices horarias (04, 05, 06), puesto que el enunciado exige rutas ``lo más acertadas posibles en sus tiempos de viaje''. Eliminar el componente TD invalidaría la tesis central del proyecto.
+    \item \textbf{Tamaño reducido}: se selecciona una submuestra estratificada de \textbf{30 pasajeros} del turno AM, preservando la distribución de categorías ($\approx$4/11/13/2 para categorías 1--4, correspondiente al 14/35/43/7\%) y la dispersión geográfica de la instancia original.
+    \item \textbf{Tiempos estáticos}: en lugar del modelo predictivo XGBoost, se usan los promedios cruzados de las tres matrices horarias disponibles (04h, 05h, 06h). Esto desacopla la validación del optimizador de la incertidumbre del predictor, facilitando la comparación directa con el MILP como oráculo.
+    \item \textbf{Flota heterogénea conservada}: se mantienen ambos tipos de vehículo (\textsc{Common}: $Q=3$, $F=2\,200$ CLP; \textsc{Large}: $Q=6$, $F=4\,500$ CLP), siguiendo la instrucción del profesor tutor de preservar la heterogeneidad como componente central del problema.
+    \item \textbf{Restricciones sindicales conservadas}: no se relaja ninguna restricción de compatibilidad ni de tiempo máximo en vehículo, ya que son el componente diferenciador del TD-HDARP respecto a los DARP clásicos.
 \end{enumerate}
 
 \subsection{Línea Base y KPIs Reportados}
-Como \textit{benchmark} comparativo se implementa una \textbf{heurística miope}: asigna cada pasajero, en orden ascendente por $\sigma_i$, al vehículo Common activo que minimice el costo marginal dentro de sus ventanas factibles; si ninguno acepta, abre un nuevo vehículo. Además del costo objetivo \eqref{eq:obj}, se reportarán (siguiendo a \cite{Pilati2025}) tiempo de espera promedio por pasajero, balance de jornada de conductores (mín/mediana/máx por ruta), ocupación promedio y \textit{gap} relativo respecto a la línea base miope.
+Como \textit{benchmark} comparativo se implementa una \textbf{heurística miope}: asigna cada pasajero, en orden ascendente por $\sigma_i$, al vehículo activo (Common o Large) que minimice el costo marginal dentro de sus ventanas factibles y respete las restricciones sindicales; si ningún vehículo activo acepta, abre uno nuevo. Además del costo objetivo \eqref{eq:obj}, se reportarán (siguiendo a \cite{Pilati2025}) tiempo de espera promedio por pasajero, balance de jornada de conductores (mín/mediana/máx por ruta), ocupación promedio y \textit{gap} relativo respecto a la línea base miope.
 
 \section{Especificación Algorítmica del ALNS}
 \label{sec:alns}
@@ -139,35 +139,11 @@ La solución inicial se construye según \cite{Pilati2025}: se ordenan las solic
 
 \subsection{Operadores de Destrucción y Reparación}
 
-\begin{table}[h]
-\centering
-\caption{Operadores de destrucción y reparación del ALNS}
-\label{tab:operadores}
-\vspace{0.5em}
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l p{8.5cm} @{}}
-\toprule
-\textbf{Operador} & \textbf{Descripción} \\ \midrule
-\multicolumn{2}{l}{\textit{Destrucción}} \\ \addlinespace
-Random Removal & Elimina solicitudes al azar de rutas al azar (diversificación). \\ \addlinespace
-Worst Removal & Elimina las solicitudes con mayor contribución marginal al costo. \\ \addlinespace
-Related Removal & Tipo Shaw: elimina solicitudes similares a una semilla por distancia, similitud de ventanas y misma categoría sindical. \\ \addlinespace
-Load-violation Removal & Prioriza las solicitudes que más contribuyen a $q(s)$; recae en Worst si no hay exceso. \\ \addlinespace
-Time-based Removal & Prioriza violaciones activas de $r(s)$ y $d(s)$. \\ \addlinespace
-Category-violation Removal & Adición propia: remueve solicitudes que causan violaciones de \eqref{eq:r13}--\eqref{eq:r14}. \\ \addlinespace
-Route Removal & Elimina rutas completas de baja ocupación; ataca directamente el costo fijo $F^{t(k)} y_k$. \\ \midrule
-\multicolumn{2}{l}{\textit{Reparación}} \\ \addlinespace
-Best Insertion & Selecciona vía ruleta entre las tres mejores posiciones por incremento mínimo de \eqref{eq:eval-ours}. \\ \addlinespace
-Random Insertion & Orden aleatorio de inserción; posición elegida también al azar. \\ \addlinespace
-Regret-2 / Regret-3 Insertion & Prioriza solicitudes cuyo costo se dispara si no se insertan en su mejor posición; Regret-3 resulta útil para pasajeros críticos (categoría 4, ventana de 5 min). \\ \addlinespace
-Zero-load Insertion & Novel de \cite{Pilati2025}: inserta en posiciones donde el vehículo está vacío, facilitando simultáneamente factibilidad de capacidad y de categoría. \\ \bottomrule
-\end{tabular*}
-\end{table}
-
-La selección de operadores se realiza por \textit{ruleta} con probabilidades proporcionales a los pesos $w_i$, actualizados cada $t_{\mathrm{seg}}$ iteraciones mediante $w_{i,j+1}=w_{i,j}(1-\rho)+\rho\,\pi_i/\theta_i$, donde $\pi_i$ acumula los scores $\sigma_1=10$ (nuevo \textit{global best}), $\sigma_2=2$ (nueva referencia) o $\sigma_3=0$ y $\theta_i$ es el número de usos del operador en el segmento. Se siguen los valores de \cite{Pilati2025}: $\rho=0{,}1$ y $\delta\sim U(0{,}05,0{,}10)$; los tiempos $t_{\mathrm{tot}}$ ($\approx$30 min CPU), $t_{\mathrm{seg}}$ ($\approx$500 iter) y $t_{\mathrm{last}}$ ($\approx$2\,000 iter sin mejora) se calibrarán empíricamente sobre el Caso Base en la Entrega 3.
+Se implementaron siete operadores de destrucción y cinco de reparación, listados en la Tabla~\ref{tab:operadores} del Apéndice. Para instancias grandes ($n > 100$ pasajeros), los operadores Regret-2 y Regret-3 se desactivan automáticamente por su costo cuadrático de evaluación, operando con los tres operadores de reparación restantes (Best, Random y Zero-load). La selección de operadores se realiza por \textit{ruleta} con probabilidades proporcionales a los pesos $w_i$, actualizados cada $t_{\mathrm{seg}}$ iteraciones mediante $w_{i,j+1}=w_{i,j}(1-\rho)+\rho\,\pi_i/\theta_i$, donde $\pi_i$ acumula los scores $\sigma_1=10$ (nuevo \textit{global best}), $\sigma_2=2$ (nueva referencia) o $\sigma_3=0$ y $\theta_i$ es el número de usos del operador en el segmento. Se siguen los valores de \cite{Pilati2025}: $\rho=0{,}1$ y $\delta\sim U(0{,}05,0{,}10)$; los parámetros $t_{\mathrm{tot}} \approx 60$ min, $t_{\mathrm{seg}} \approx 500$ iter y $t_{\mathrm{last}} \approx 500$ iter sin mejora se calibraron empíricamente sobre la instancia AM completa.
 
 \subsection{Criterio de Aceptación y Parada}
-La solución candidata $s'$ se acepta como nuevo incumbente $s_{\text{best}}$ sólo si es factible y $f(s')<f(s_{\text{best}})$. Como referencia de trabajo $s^*$, se acepta si $f(s')<f(s^*)$; si no hay mejora durante $t_{\mathrm{last}}$ iteraciones, $s'$ pasa a ser la nueva referencia (diversificación forzada). Si $c(s')\leq 1{,}02\cdot c(s^*)$, se aplica búsqueda local intra-ruta (swap/relocate) para intensificación, siguiendo el híbrido de \cite{Zhao2022}. El algoritmo termina al alcanzar $t_{\mathrm{tot}}$.
+La solución candidata $s'$ se acepta como nuevo incumbente $s_{\text{best}}$ sólo si es factible y $f(s')<f(s_{\text{best}})$. Como referencia de trabajo $s^*$, se acepta si $f(s')<f(s^*)$; si no hay mejora durante $t_{\mathrm{last}}$ iteraciones consecutivas sin mejora del incumbente, la referencia $s^*$ se resetea al mejor incumbente conocido y los pesos de penalización se reinician a 1 (diversificación forzada). El algoritmo termina al alcanzar $t_{\mathrm{tot}}$. El pseudocódigo completo se incluye en el Apéndice~\ref{anexo:pseudocodigo}.
 
 \section{Fortalezas y Debilidades}
 
-Como \textbf{fortalezas}, el MILP \eqref{eq:obj}--\eqref{eq:r14} es coherente con el enunciado y los datos, habilita el uso de Gurobi como oráculo sobre el Caso Base, y la función de evaluación \eqref{eq:eval-ours} absorbe infactibilidades transitorias sin comprometer la factibilidad final, esencial en un espacio fragmentado por restricciones sindicales; además, el portafolio de operadores incluye uno propio (\textit{Category-violation Removal}) inexistente en la literatura revisada, y la adopción de parámetros validados en \cite{Pilati2025} reduce el espacio de calibración. Como \textbf{debilidades}, la representación escalonada de $\tau_{ij}(t)$ puede subestimar la volatilidad real del tráfico y el error del XGBoost se propaga al modelo; las restricciones se asumen duras, por lo que una infactibilidad en el Caso Base (por ejemplo, categoría 4 aislada) obligaría a relajaciones documentadas; la heurística constructiva aleatorizada admite soluciones iniciales infactibles que el ALNS debe reparar antes de mejorar el costo; y el peso $\phi$ del término sindical no tiene calibración previa en la literatura.
+Como \textbf{fortalezas}, el MILP \eqref{eq:obj}--\eqref{eq:r14} es coherente con el enunciado y los datos, y la función de evaluación \eqref{eq:eval-ours} absorbe infactibilidades transitorias sin comprometer la factibilidad final, esencial en un espacio fragmentado por restricciones sindicales; el portafolio de operadores incluye uno propio (\textit{Category-violation Removal}) inexistente en la literatura revisada; el modelo XGBoost se integra en pre-cómputo batch sin costos adicionales por iteración; y la adopción de parámetros validados en \cite{Pilati2025} reduce el espacio de calibración. Como \textbf{debilidades}, la representación escalonada de $\tau_{ij}(t)$ puede subestimar la volatilidad real del tráfico y si XGBoost subestima un tiempo de viaje real, la solución podría resultar infactible en la ejecución diaria; el MILP no convergió a una solución incumbente en el Caso Base dentro de un tiempo razonable, impidiendo validar el ALNS contra el óptimo exacto; y el peso $\phi$ del término sindical no tiene calibración previa en la literatura.

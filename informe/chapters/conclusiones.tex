@@ -1,11 +1,35 @@
+Este informe presenta el desarrollo completo de un sistema de ruteo para profesionales de la salud en Santiago de Chile, clasificado como un \textit{Time-Dependent Heterogeneous Dial-a-Ride Problem} (TD-HDARP). A continuación se sintetizan los hallazgos principales, las fortalezas y debilidades de la metodología, y los pasos futuros.
 
-A modo de síntesis se abordarán los aspectos de mayor importancia tratados en el informe en la siguiente sección:
-\section{}
-\section{}
-Posteriormente, se sintetizarán los puntos débiles y fuertes acerca de la metodología elegida:
-\section{}
-\section{}
-Una vez definido el problema, los objetivos y la metodología que se usará para la creación del modelo, resulta pertinente planificar el camino que seguiremos de aquí en adelante considerando las fechas de entrega y los objetivos en cada una de estas etapas.
-En la sección Anexos (Figura 2.1.) se puede encontrar una carta Gantt que detalla la planificación hasta la fecha y los pasos futuros de este proyecto. En la siguiente sección se detallan algunos de estos:
-\section{}
-\section{}
+\section{Síntesis de hallazgos}
+
+El ALNS implementado mejora el costo operacional en un \textbf{14,2\%} respecto a la heurística miope sobre la instancia AM completa (620 pasajeros), pasando de 9.197.549 CLP a 7.891.641 CLP, con una reducción simultánea de la flota de 241 a 221 vehículos. La mejora se concentra en las primeras 100 iteraciones y converge alrededor de la iteración 1.100, lo que sugiere que el algoritmo alcanza rápidamente un entorno del óptimo local desde la solución inicial miope.
+
+El modelo predictivo XGBoost para los tiempos de viaje ($\tau_{ij}(t)$) alcanza un MAE de 88,6 segundos (1,48 minutos) sobre el conjunto de prueba. La integración de este modelo al ALNS mediante pre-cómputo en lote mantiene el lookup en $O(1)$ (275.000 llamadas/s) sin degradar el rendimiento del optimizador, y produce una mejora adicional del 2,91\% en el Caso Base de 30 pasajeros respecto a la versión estática.
+
+\section{Fortalezas de la metodología}
+
+\begin{itemize}
+    \item \textbf{Escalabilidad}: el ALNS resuelve instancias de 620 pasajeros en tiempo razonable (18 iters/s), donde métodos exactos son computacionalmente inviables.
+    \item \textbf{Función de evaluación penalizada}: permite explorar el espacio infactible, lo que es esencial dado que las restricciones sindicales fragmentan severamente la vecindad de soluciones factibles.
+    \item \textbf{Operador propio}: el \textit{Category-violation Removal} aborda directamente las restricciones sindicales sin precedente en la literatura revisada.
+    \item \textbf{Integración TD eficiente}: el batch pre-compute hace viable el XGBoost en producción diaria (10 s de overhead inicial, O(1) en runtime).
+    \item \textbf{Reproducibilidad}: toda la pipeline es determinista dado un seed fijo, facilitando la comparación entre experimentos.
+\end{itemize}
+
+\section{Debilidades identificadas}
+
+\begin{itemize}
+    \item \textbf{MILP sin incumbente}: Gurobi no encontró solución factible en el Caso Base con las restricciones sindicales, impidiendo validar el ALNS contra un óptimo exacto. El bound dual sugiere un potencial de mejora adicional significativo.
+    \item \textbf{XGBoost fuera de distribución}: el conjunto de entrenamiento (viajes de 4 km promedio) difiere del dominio del problema (16,6 km), limitando la capacidad del modelo de capturar patrones de congestión para viajes largos.
+  
+\end{itemize}
+
+\section{Pasos futuros}
+
+\begin{itemize}
+    \item \textbf{Validación contra MILP}: incorporar estrategias de ramificación específicas (cortes de categorías consecutivas, separación de la restricción de pasajero solo) para obtener una solución exacta del Caso Base.
+    \item \textbf{Criterio SA}: implementar Simulated Annealing en el motor ALNS y calibrar la temperatura inicial y el factor de enfriamiento sobre el Caso Base.
+    \item \textbf{XGBoost con datos representativos}: enriquecer el conjunto de entrenamiento con viajes de distancias similares a los del problema (~16 km) para mejorar la precisión del modelo TD.
+    \item \textbf{Extensión a instancia PM}: ejecutar el pipeline completo sobre la instancia PM y reportar métricas comparativas.
+    \item \textbf{Análisis de sensibilidad}: evaluar el impacto de la reincorporación de outliers de tiempos reales en los resultados finales.
+\end{itemize}

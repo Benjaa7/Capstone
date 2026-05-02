@@ -1,14 +1,14 @@
-A continuación, se describe el problema y caso de estudio, junto con un análisis teórico y de datos asociados, abordaje profundo de los objetivos y las motivaciones.
+A continuación, se describe el problema y el caso de estudio, junto con un análisis teórico y de datos asociados, y el abordaje profundo de los objetivos y las motivaciones.
 
 \section{Descripción del Problema}
 
-El caso en primera instancia representa un problema de enrutamiento logístico. Durante la mañana de una jornada laboral, cada profesional de la salud se inscribe solicitando transporte para el día siguiente, ya sea para el turno AM (ruta domicilio-trabajo) o PM (ruta trabajo-domicilio), indicando sus horarios disponibles. Las rutas se planifican durante la tarde del día de la inscripción.
+El caso, en primera instancia representa un problema de enrutamiento logístico. Durante la mañana de una jornada laboral, cada profesional de la salud se inscribe solicitando transporte para el día siguiente, ya sea para el turno AM (ruta domicilio-trabajo) o PM (ruta trabajo-domicilio), indicando sus horarios disponibles. Las rutas se planifican durante la tarde del día de la inscripción.
 
 El problema se debe abordar con el fin de minimizar los costos operacionales, mediante cuatro decisiones clave: selección de flota (cantidad y tipo de vehículo a despachar), asignación de pasajeros (respetando compatibilidades sindicales), secuenciación de rutas (orden geográfico de paradas) y programación horaria (tiempos exactos de recogida y entrega sin exceder límites de espera o viaje).
 
-El modelo considera los recursos de la empresa, que dispone de una flota de vehículos variada en términos de tipo y espacio. El uso de un vehículo tiene asociado un costo fijo, el cual se cobra independientemente de la cantidad de personas dentro del este (es decir, estando vacío, incompleto o lleno, el cobro se realiza de todas formas) y un costo variable por kilómetro recorrido. 
+El modelo considera los recursos de la empresa, que dispone de una flota de vehículos variada en términos de tipo y espacio. El uso de un vehículo tiene asociado un costo fijo, el cual se cobra independientemente de la cantidad de personas dentro de este (es decir, estando vacío, incompleto o lleno, el cobro se realiza de todas formas), y un costo variable por kilómetro recorrido. 
 
-Existen además, las restricciones con cumplimiento obligatorio, que si bien, no hay penalizaciones por incumplimiento, este no puede ocurrir:
+Existen, además, las restricciones de cumplimiento obligatorio, que si bien no hay penalizaciones por incumplimiento, este no puede ocurrir:
 \begin{itemize}
     \item Categorías de pasajeros: cuatro grupos, con transporte simultáneo permitido solo entre dos categorías consecutivas (ej. 1 y 2, o 3 y 4).
     \item Restricciones temporales: los profesionales no pueden llegar demasiado temprano ni permanecer excesivo tiempo en el vehículo.

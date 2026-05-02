@@ -60,6 +60,7 @@ class Instance:
     _eff_pickup_cache: dict[int, tuple[float, float]] = field(default_factory=dict, repr=False)
     _vehicle_cache: dict[str, dict] = field(default_factory=dict, repr=False)
     _solo_cache: set[int] | None = field(default=None, repr=False)
+    _td_predictor: object = field(default=None, repr=False)  # TravelTimePredictor when TD enabled
 
     # ------------------------------------------------------------------
     # Construction
@@ -145,9 +146,82 @@ class Instance:
     ) -> float:
         """Return travel time (s) from ``orig`` to ``dest`` for a departure at ``t``.
 
-        If ``t`` is None, the cross-hour mean is returned (static mode).
+        * ``t=None``  → static cross-hour mean (default, fast O(1) dict lookup).
+        * ``t=float`` → hour-specific lookup. If ``use_xgboost_batch()`` was
+          called, the lookup table has been overwritten with XGBoost predictions.
         """
         return self._lookup(orig, dest, t)[0]
+
+    def use_xgboost_batch(
+        self,
+        model_path: "str | Path | None" = None,
+        reference_date: str = "2026-03-31",
+        verbose: bool = True,
+    ) -> None:
+        """Pre-compute XGBoost travel-time predictions for ALL OD pairs in batch.
+
+        This replaces the CSV-based hourly lookup tables with XGBoost predictions.
+        After this call, ``tau(orig, dest, t=float)`` returns XGBoost estimates
+        while remaining O(1) — identical to the static lookup at runtime.
+
+        Batch inference (~409k pairs per hour) takes ~3–5 s per hour on a laptop.
+        """
+        import time as _time
+        from pathlib import Path as _Path
+        import pandas as _pd
+        from src.predictive.features import FEATURE_COLS, build_features
+        from src.predictive.predict import TravelTimePredictor
+
+        if model_path is None:
+            model_path = _Path(__file__).resolve().parents[2] / "results" / "xgb_tau.json"
+        predictor = TravelTimePredictor(model_path)
+        self._td_predictor = predictor
+
+        for hour in sorted(self.time_matrices.keys()):
+            t0 = _time.perf_counter()
+            # Build the existing per-hour lookup (CSV values) — needed as features.
+            base_lookup = self._ensure_hour_lookup(hour)
+            hour_secs = float(hour * 3600)
+            departure_str = reference_date + f" {hour:02d}:00:00"
+
+            # Collect all OD pairs into a DataFrame for batch inference.
+            keys = list(base_lookup.keys())
+            rows = []
+            for orig_lat, orig_lon, dest_lat, dest_lon in keys:
+                prov_t = base_lookup[(orig_lat, orig_lon, dest_lat, dest_lon)][0]
+                rows.append({
+                    "orig_latitude": orig_lat, "orig_longitude": orig_lon,
+                    "dest_latitude": dest_lat, "dest_longitude": dest_lon,
+                    "departure_at": departure_str,
+                    "predicted_time": prov_t,
+                })
+            df_pairs = _pd.DataFrame(rows)
+            df_pairs["departure_at"] = _pd.to_datetime(df_pairs["departure_at"])
+            X_batch = build_features(df_pairs)
+
+            import numpy as _np
+            log_ratios = predictor._model.predict(X_batch)
+            prov_times = _np.array([base_lookup[k][0] for k in keys])
+            xgb_times = _np.maximum(prov_times * _np.exp(log_ratios), 30.0)
+
+            # Overwrite the hour lookup with XGBoost times; distances stay the same.
+            new_lookup: dict[tuple, tuple[float, float]] = {}
+            for k, xgb_t, (orig_lat, orig_lon, dest_lat, dest_lon) in zip(
+                keys, xgb_times, keys
+            ):
+                dist = base_lookup[k][1]
+                new_lookup[k] = (float(xgb_t), float(dist))
+            self._time_lookup[hour] = new_lookup
+            # Invalidate the average cache so it gets recomputed from new values.
+            self._avg_lookup = {}
+            elapsed = _time.perf_counter() - t0
+            if verbose:
+                print(f"  hour {hour:02d}h: {len(keys)} pairs, XGB in {elapsed:.1f}s")
+
+    @property
+    def is_time_dependent(self) -> bool:
+        """True if XGBoost TD tables are loaded."""
+        return self._td_predictor is not None
 
     def distance(
         self,
